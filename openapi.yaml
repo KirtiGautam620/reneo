@@ -1,0 +1,590 @@
+openapi: 3.1.0
+
+info:
+  title: Reneo API
+  version: 1.0.0
+  description: |
+    Backend for a multi-seller commerce platform.
+
+    **Authentication.** Every endpoint requires a Supabase Auth JWT in the
+    `Authorization` header. The API forwards that token to PostgreSQL, so
+    Row Level Security applies to every query — authorization is enforced by
+    the database, not only by middleware.
+
+    **Money.** All amounts are integers in the currency's minor unit
+    (`price_minor`, `total_minor`). XOF is a zero-decimal currency, so one
+    minor unit is one franc. Floating point is never used.
+
+    **Server-owned pricing.** Clients never send prices. `POST /orders` accepts
+    only product IDs and quantities; the server resolves price, seller,
+    availability and stock inside a single database transaction. Payloads
+    containing unknown keys — including a price — are rejected with 400.
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Stores
+    description: Seller store management (one store per seller)
+  - name: Products
+    description: Catalogue — seller-owned writes, marketplace-wide reads
+  - name: Orders
+    description: Order placement, atomic under concurrency
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Stores]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /stores:
+    post:
+      tags: [Stores]
+      summary: Create the caller's store
+      description: |
+        A seller may own exactly one store, enforced by a `UNIQUE` constraint on
+        `stores.seller_id`. A second attempt returns 409. `seller_id` is taken
+        from the JWT and cannot be supplied by the client.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 200, example: Store A }
+      responses:
+        '201':
+          description: Store created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Store' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Caller is not a SELLER
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Seller already has a store
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: { code: CONFLICT, message: Seller already has a store, details: null }
+
+  /stores/me:
+    get:
+      tags: [Stores]
+      summary: Get the caller's store
+      description: |
+        No `seller_id` filter is applied in the query. RLS restricts the visible
+        rows to the caller's own store.
+      responses:
+        '200':
+          description: The caller's store, or null if none exists
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/Store' }
+                  - { type: 'null' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Caller is not a SELLER
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /products:
+    get:
+      tags: [Products]
+      summary: Search and list products
+      description: |
+        Cursor (keyset) pagination, not `OFFSET`. `OFFSET 100000` makes Postgres
+        read and discard 100,000 rows; keyset pagination is an index seek, so the
+        cost per page is constant at any depth. The trade-off is that arbitrary
+        page numbers are not supported — only next/previous.
+
+        Pass the `next_cursor` from the previous response as `cursor`. The
+        cursor encodes the sort key of the last row, so it must be used with the
+        same `sort` value it was issued for.
+      parameters:
+        - name: q
+          in: query
+          description: Full-text search over name and description (GIN index, `simple` configuration)
+          schema: { type: string, minLength: 1, maxLength: 100 }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: min_price
+          in: query
+          description: Inclusive lower bound, minor units
+          schema: { type: integer, minimum: 0 }
+        - name: max_price
+          in: query
+          description: Inclusive upper bound, minor units
+          schema: { type: integer, minimum: 0 }
+        - name: in_stock
+          in: query
+          description: When `true`, only products with quantity greater than zero
+          schema: { type: string, enum: ['true', 'false'] }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [newest, price_asc, price_desc], default: newest }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: cursor
+          in: query
+          description: Opaque base64url cursor from a previous response
+          schema: { type: string }
+      responses:
+        '200':
+          description: Matching products
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ProductListItem' }
+                  next_cursor:
+                    type: [string, 'null']
+                    description: Null when there are no further pages
+                  limit: { type: integer }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+    post:
+      tags: [Products]
+      summary: Create a product
+      description: |
+        Creates the product and its inventory row. `store_id` is resolved from
+        the caller's JWT and cannot be supplied by the client.
+
+        **Known limitation:** the product and inventory inserts are two separate
+        round trips and are not atomic. See the README.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, category, price_minor]
+              properties:
+                name:        { type: string, minLength: 1, maxLength: 200 }
+                description: { type: string, maxLength: 2000 }
+                category:    { type: string, minLength: 1, maxLength: 100 }
+                price_minor:
+                  type: integer
+                  minimum: 0
+                  description: Integer minor units. Decimals are rejected.
+                quantity:
+                  type: integer
+                  minimum: 0
+                  default: 0
+                  description: Initial stock. Not editable via PATCH.
+            example:
+              name: Solar Lamp
+              category: lighting
+              price_minor: 50000
+              quantity: 5
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '400':
+          description: |
+            Validation failed. Unknown keys are rejected, so sending `status`,
+            `store_id` or any other unlisted field returns 400 rather than being
+            silently ignored.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Caller is not a SELLER
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /products/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    get:
+      tags: [Products]
+      summary: Read one product
+      description: |
+        Any authenticated user can read an ACTIVE product. A seller can
+        additionally read their own ARCHIVED products.
+      responses:
+        '200':
+          description: The product with its inventory
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductWithInventory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+    patch:
+      tags: [Products]
+      summary: Update own product
+      description: |
+        Returns **403 for both "does not exist" and "not yours"**. RLS makes the
+        update match zero rows in either case and the database deliberately does
+        not distinguish them; returning 404 for one and 403 for the other would
+        leak which product IDs exist.
+
+        `quantity` cannot be changed here — stock is modified only through order
+        placement, so that a concurrent order's decrement cannot be overwritten.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                name:        { type: string, minLength: 1, maxLength: 200 }
+                description: { type: string, maxLength: 2000 }
+                category:    { type: string, minLength: 1, maxLength: 100 }
+                price_minor: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Updated product
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Not found, or not owned by the caller
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: { code: FORBIDDEN, message: Product not found or not owned by you, details: null }
+
+    delete:
+      tags: [Products]
+      summary: Archive own product
+      description: |
+        Soft delete — sets `status` to `ARCHIVED`. A hard delete is not offered
+        because `order_items` references products; removing the row would either
+        violate the foreign key or destroy order history.
+      responses:
+        '200':
+          description: Product archived
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:     { type: string, format: uuid }
+                  status: { type: string, enum: [ARCHIVED] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Not found, or not owned by the caller
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /orders:
+    post:
+      tags: [Orders]
+      summary: Place an order
+      description: |
+        Executes entirely inside one PostgreSQL function (`create_order`), which
+        is one implicit transaction. `supabase-js` has no transaction API, so
+        multi-step logic that must be atomic cannot live in Node.
+
+        **Concurrency.** Stock is taken with a conditional decrement
+        (`UPDATE ... WHERE quantity >= requested`), which acquires the row lock,
+        evaluates the condition and writes as one indivisible operation. With
+        stock 1 and two simultaneous requests, exactly one succeeds; the second
+        blocks on the lock, re-evaluates against the committed value, matches
+        zero rows and receives 409.
+
+        **Pricing.** The client sends only product IDs and quantities. Price,
+        seller and availability are resolved server-side from the products
+        table. A payload containing a price is rejected with 400.
+
+        **Idempotency.** Supply an `Idempotency-Key` header. A repeat with the
+        same key and the same payload returns the original order with
+        `replayed: true` and HTTP 200. The same key with a different payload
+        returns 409.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: Client-generated key, retained 24 hours
+          schema: { type: string, maxLength: 255 }
+          example: 8f14e45f-ea6a-4c1b-9f2e-3d7a1b0c5e91
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [product_id, quantity]
+                    properties:
+                      product_id: { type: string, format: uuid }
+                      quantity:   { type: integer, minimum: 1 }
+            example:
+              items:
+                - product_id: 62648926-1e11-44d2-aea3-0ae059a31464
+                  quantity: 2
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResult' }
+              example:
+                order_id: 3f2b1c9e-77aa-4d1e-9b3c-1a2b3c4d5e6f
+                total_minor: 100000
+                replayed: false
+        '200':
+          description: Replay of a previous request with the same idempotency key
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResult' }
+              example:
+                order_id: 3f2b1c9e-77aa-4d1e-9b3c-1a2b3c4d5e6f
+                replayed: true
+        '400':
+          description: Validation failed, including an unknown key such as a client-supplied price
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Caller is not a CUSTOMER
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: { code: NOT_A_CUSTOMER, message: Only customers can place orders, details: null }
+        '404':
+          description: A product in the order does not exist
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: |
+            Insufficient stock (`OUT_OF_STOCK`), an archived or unavailable
+            product (`PRODUCT_UNAVAILABLE`), or an idempotency key reused with a
+            different payload (`IDEMPOTENCY_KEY_REUSED`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error: { code: OUT_OF_STOCK, message: 'Insufficient stock: 62648926-1e11-44d2-aea3-0ae059a31464', details: null }
+
+    get:
+      tags: [Orders]
+      summary: List orders visible to the caller
+      description: |
+        No filter is applied in the query. RLS decides visibility: a customer
+        sees their own orders, a seller sees orders containing at least one of
+        their line items.
+      responses:
+        '200':
+          description: Orders with their line items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Order' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase Auth access token
+
+  responses:
+    BadRequest:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Invalid request payload
+              details:
+                - path: price_minor
+                  message: Expected number, received string
+    Unauthenticated:
+      description: Missing, invalid or expired token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error: { code: UNAUTHENTICATED, message: Invalid or expired token, details: null }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      description: |
+        Every error in the API has this shape. Clients should branch on `code`,
+        never on `message`.
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - UNAUTHENTICATED
+                - FORBIDDEN
+                - NOT_A_CUSTOMER
+                - NOT_FOUND
+                - CONFLICT
+                - OUT_OF_STOCK
+                - PRODUCT_UNAVAILABLE
+                - IDEMPOTENCY_KEY_REUSED
+                - INTERNAL_ERROR
+            message: { type: string }
+            details:
+              type: [array, object, 'null']
+              description: Field-level validation issues, or null
+
+    Store:
+      type: object
+      properties:
+        id:         { type: string, format: uuid }
+        seller_id:  { type: string, format: uuid }
+        name:       { type: string }
+        created_at: { type: string, format: date-time }
+
+    Product:
+      type: object
+      properties:
+        id:          { type: string, format: uuid }
+        store_id:    { type: string, format: uuid }
+        name:        { type: string }
+        description: { type: [string, 'null'] }
+        category:    { type: string }
+        price_minor: { type: integer, description: Minor units }
+        currency:    { type: string, example: XOF }
+        status:      { type: string, enum: [ACTIVE, ARCHIVED] }
+        created_at:  { type: string, format: date-time }
+        updated_at:  { type: string, format: date-time }
+
+    ProductWithInventory:
+      allOf:
+        - $ref: '#/components/schemas/Product'
+        - type: object
+          properties:
+            inventory:
+              type: object
+              properties:
+                quantity: { type: integer }
+
+    ProductListItem:
+      type: object
+      properties:
+        id:          { type: string, format: uuid }
+        name:        { type: string }
+        description: { type: [string, 'null'] }
+        category:    { type: string }
+        price_minor: { type: integer }
+        currency:    { type: string }
+        created_at:  { type: string, format: date-time }
+        inventory:
+          type: object
+          properties:
+            quantity: { type: integer }
+
+    OrderResult:
+      type: object
+      properties:
+        order_id:    { type: string, format: uuid }
+        total_minor: { type: integer, description: Computed server-side inside the transaction }
+        replayed:    { type: boolean, description: True when returned from an idempotency key }
+
+    Order:
+      type: object
+      description: |
+        An order has no `seller_id` — it may span several sellers. The seller
+        lives on each line item.
+      properties:
+        id:          { type: string, format: uuid }
+        customer_id: { type: string, format: uuid }
+        status:      { type: string, enum: [PENDING, CONFIRMED, CANCELLED] }
+        total_minor: { type: integer }
+        currency:    { type: string }
+        created_at:  { type: string, format: date-time }
+        order_items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItem' }
+
+    OrderItem:
+      type: object
+      description: |
+        `seller_id`, `product_name` and `unit_price_minor` are snapshots taken at
+        purchase time. Later catalogue changes do not rewrite historical orders.
+      properties:
+        id:               { type: string, format: uuid }
+        order_id:         { type: string, format: uuid }
+        product_id:       { type: string, format: uuid }
+        seller_id:        { type: string, format: uuid }
+        product_name:     { type: string }
+        unit_price_minor: { type: integer }
+        quantity:         { type: integer }
+        subtotal_minor:   { type: integer, description: Generated column, unit_price_minor × quantity }
