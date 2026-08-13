@@ -14,7 +14,7 @@ Backend for a multi-seller commerce platform. Node.js / TypeScript / Express / S
 git clone <repo>
 cd reneo-backend
 npm install
-cp .env.example .env      # fill in your Supabase values
+cp .env.example .env
 npm run dev
 ```
 
