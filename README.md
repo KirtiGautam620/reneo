@@ -184,7 +184,7 @@ Items are locked in sorted `product_id` order. Without this, an order for [A, B]
 
 - **Same key, same payload** → the original `order_id` is returned with `replayed: true` and HTTP 200. No second order.
 - **Same key, different payload** → `409 IDEMPOTENCY_KEY_REUSED`. Detected by comparing a hash of the items array stored alongside the key; without the hash this case is undetectable.
-- **Retention:** keys are kept _TODO: state your retention window and the cleanup mechanism_.
+- **Retention:** keys are kept for 24 hours. That covers client retries and network-level replays without growing the table indefinitely. No cleanup job is implemented — `idempotency_keys_created_at_idx` supports a `DELETE FROM idempotency_keys WHERE created_at < now() - interval '24 hours'` run as a scheduled job (pg_cron in production). This is a known gap.
 
 The key is written inside the same transaction as the order, so a rolled-back order leaves no key behind.
 
@@ -200,7 +200,12 @@ Transactional outbox. `ORDER_CREATED` is inserted into `events` **inside the sam
 
 `events (created_at) WHERE delivered_at IS NULL` is a partial index — it contains only undelivered rows, so it stays small forever regardless of table size.
 
-_TODO: state whether the worker is implemented or whether delivery is via Supabase Realtime, and how retries/backoff actually behave._
+**Implementation.** A polling worker (`src/lib/outbox.ts`) runs every 5 seconds, claims up to 20 undelivered events ordered by `id`, and broadcasts on a per-seller Supabase Realtime channel. `attempts` is incremented on both success and failure, so a permanently failing event cannot block the queue — after 5 attempts it drops out of the worker's query and remains visible for inspection (dead letter).
+
+**Limitations, deliberately not solved here:**
+- Single-instance only. Two workers would claim the same rows and deliver duplicates. The fix is `FOR UPDATE SKIP LOCKED` inside a plpgsql claim function.
+- Fixed 5-second interval, no exponential backoff. A production version would add a `next_attempt_at` column and space retries out.
+- At-least-once delivery, not exactly-once. Consumers must be idempotent.
 
 ---
 
