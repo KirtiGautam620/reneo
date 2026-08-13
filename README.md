@@ -303,15 +303,134 @@ Test 5 fires requests with `Promise.all` so they actually race; sequential `awai
 
 ## Part D — written answers
 
-### D1. Scaling to 10M users
+### D1. Scaling to 10 million users
 
-_TODO. Include a diagram. Cover: what breaks first and how you'd know, the database, caching, queues, workers, storage, monitoring — and explicitly what you would **not** do yet, and why._
+#### Where it stands today
 
-Points worth making, once you've thought them through yourself:
-- Random UUID primary keys hurt B-tree insert locality at scale; UUIDv7 is the ordered alternative.
-- Reads scale with replicas long before writes need sharding.
-- The outbox already gives a clean seam for moving notification delivery to a queue.
-- What you measure to know something is breaking: p99 latency, lock wait time, replication lag, outbox depth.
+One Express instance, one Supabase Postgres instance, one polling outbox worker. Order creation is a single `SECURITY DEFINER` plpgsql function, so correctness under concurrency does not depend on how many API instances are running — the guarantee lives in the database.
+
+Three measurements from the current build inform everything below:
+
+- On a 100k-row table, `Planning Time` (11 ms) exceeded `Execution Time` (0.09 ms) on a fast query. Six indexes on `products` give the planner more candidates to evaluate. Indexes are not free.
+- The original ordering index left `Rows Removed by Filter: 117` — it served the sort, not the filter. That is cheap for a common category and expensive for a selective one.
+- Test 5 fires ten concurrent orders for one unit of stock; exactly one succeeds. The other nine block on the same inventory row and are then correctly rejected.
+
+That third number is the one that scales badly, and it is where the first failure comes from.
+
+#### What breaks first
+
+Not the API servers, and not read throughput. **Lock contention on a hot product**, which then cascades:
+
+```
+one popular product, many simultaneous buyers
+        ↓
+all transactions queue on the same inventory row
+        ↓
+transactions stay open longer
+        ↓
+each open transaction holds a database connection
+        ↓
+connection pool exhausted
+        ↓
+the entire API degrades — including requests
+that have nothing to do with that product
+```
+
+This is the important part: the blast radius is not limited to the contended product. A single hot item can take down unrelated endpoints, because connections are a shared, finite resource. Everything else on this page fails more gracefully.
+
+#### How I would know
+
+| Symptom | Metric that moves first |
+|---|---|
+| API slow | p99 request latency (p50 hides the worst requests) |
+| Database overloaded | CPU %, active connection count |
+| Queries slow | `pg_stat_statements`, ranked by total time |
+| Hot-product contention | lock wait time in `pg_locks`; p99 on `POST /orders` specifically |
+| Transactions open too long | age of the oldest transaction in `pg_stat_activity` |
+| Connection pool saturated | pool wait time and queue depth |
+| Replica behind | replication lag in seconds |
+| Outbox falling behind | count and age of undelivered events |
+
+The last one is a single query against the schema as it already exists:
+
+```sql
+select count(*), min(created_at)
+from events
+where delivered_at is null;
+```
+
+A rising count means delivery is slower than order creation. A rising `min(created_at)` means something is stuck rather than merely slow — a different problem with a different fix.
+
+#### How the architecture evolves
+
+**Read replicas.** Product browsing, search and listings move to replicas — that is the bulk of traffic and it tolerates being slightly stale.
+
+Two reads stay on the primary, and the reasons differ:
+
+1. **Any read that a write depends on.** The stock check inside `create_order` must see committed truth. Reading stock from a replica would reintroduce exactly the read-modify-write race the function exists to eliminate.
+2. **A user's reads immediately after their own writes.** A seller who creates a product and then opens their product list would not see it if the replica is 200 ms behind, and would reasonably assume the create failed and do it again. This is *read-your-own-writes* consistency; the fix is to pin that user's reads to the primary for a few seconds after a write.
+
+**Caching (Redis).** Product detail and search results, which are read constantly and change rarely.
+
+Caching deliberately does **not** touch stock. A cached stock value cannot replace the transaction as the source of truth: two requests would read the same cached quantity, both pass the availability check, and both decrement — the same race as before, relocated from Postgres into Redis. Redis also cannot insert `order_items` inside the same transaction, so atomicity is lost regardless.
+
+This is where the existing design already pays off: `create_order` resolves price from the products table inside the transaction, so a stale cached price can never become the price a customer is charged. The cache is a display layer only.
+
+**Hot products.** Since caching does not help, the contention has to be addressed directly. Serialisation on that row is the price of correctness, not a bug. Two options:
+
+- *Stock buckets* — split one product's inventory across N rows; each order takes a random bucket, cutting contention roughly N-fold. Cost: "total stock" is no longer a single-row read, and the last unit may appear unavailable while it sits in a bucket the request did not pick.
+- *Queue the hot product's orders* — serialise them outside the request path, returning "order received" immediately and confirming asynchronously. Cost: order confirmation stops being synchronous, which is a product decision, not just a technical one.
+
+I would choose buckets. Queueing changes what an order *means* to the customer; bucketing keeps the guarantee and the semantics intact and only trades away exact stock visibility.
+
+**Workers and queues.** The transactional outbox is already in place, so this is a scaling change rather than a redesign: replace the single polling worker with several claiming batches via `FOR UPDATE SKIP LOCKED`, and add exponential backoff through a `next_attempt_at` column. The order path itself does not change — notification work must stay outside the transaction, because every millisecond a transaction stays open is a millisecond the lock is held.
+
+**Partitioning.** `orders` and `events` grow without bound and are almost always queried by recent date. Range partitioning by month keeps indexes small and makes archival a detach rather than a mass delete.
+
+**Storage and monitoring.** Product images to object storage with a CDN, never the database. Metrics, structured logs and tracing on `POST /orders` in particular, since that is the path with the lock.
+
+#### What I would not do yet
+
+**Sharding.** A single well-indexed Postgres instance handles tens of millions of rows. Sharding multiplies operational cost — cross-shard joins, distributed transactions, rebalancing, and a much harder failure story. Indexing, pooling, replicas and partitioning come first.
+
+There is also a schema-specific objection. `seller_id` looks like the obvious shard key for a marketplace, but **an order deliberately spans multiple sellers** — that is why `orders` has no `seller_id` and the seller lives on `order_items`. Sharding by seller would turn ordinary multi-seller orders into distributed transactions, which is a worse problem than the one being solved. Sharding by customer keeps orders intact but scatters a seller's own catalogue. Neither is obviously right, which is itself a reason to defer the decision until real query patterns exist.
+
+**Microservices.** The bottleneck is a database row, and splitting the application into services does not move that row. It would add network hops to a path that currently has none.
+
+**Indexing every filter combination.** Each index costs writes, storage and planning time — already visible at 100k rows. Which indexes to add should come from query logs, not from anticipating every combination.
+
+**Replacing Postgres for search.** Elasticsearch is the eventual answer for large-scale relevance ranking, but GIN full-text search returned matches from 100k rows in 1.4 ms. Adding a second datastore means keeping it in sync, which is a real source of bugs. Not yet.
+
+#### Target architecture
+
+```
+                        Client
+                          │
+                    ┌─────┴─────┐
+                    │    API    │  (horizontally scaled, stateless)
+                    └─────┬─────┘
+          ┌───────────────┼───────────────┐
+          │               │               │
+      writes +      read-heavy       hot product
+   consistency-       queries          reads
+    critical reads       │               │
+          │              ▼               ▼
+          │        Read replicas    Redis cache
+          │        (browse, search)  (display only,
+          │                           never stock)
+          ▼
+   Postgres primary
+   ├─ create_order()  — atomic stock, one transaction
+   └─ events          — transactional outbox
+          │
+          ▼
+    Outbox workers  (FOR UPDATE SKIP LOCKED, backoff)
+          │
+          ▼
+     Notifications
+```
+
+Routing rules: writes and consistency-critical reads to the primary; read-heavy browsing to replicas, with a user pinned to the primary briefly after their own writes; frequently-read product data cached, stock never cached; order events through the outbox to workers.
 
 ### D2. What I did not have time to do
 
@@ -322,14 +441,3 @@ _TODO._
 _TODO. The brief says an honest answer costs nothing — be specific about what you didn't know, and what you understood afterwards._
 
 ---
-
-## Deliverables checklist
-
-- [x] GitHub repository with real commit history
-- [ ] README with architecture, setup, choices, limitations, Part D
-- [x] SQL migrations that rebuild the database from scratch
-- [x] RLS policies in the repository
-- [ ] API documentation (OpenAPI or Postman)
-- [ ] Automated tests with a documented command
-- [x] `.env.example`, no real secrets anywhere including Git history
-- [ ] 3–5 minute video including the concurrency test running
