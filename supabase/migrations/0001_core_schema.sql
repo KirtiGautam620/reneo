@@ -25,7 +25,7 @@ create table stores(
 -- products
 create table products(
     id uuid primary key default gen_random_uuid(),
-    store_id uuid not null unique references stores(id) on delete cascade,
+    store_id uuid not null references stores(id) on delete cascade,
     name text not null check(length(trim(name))>0),
     description text,
     category text not null,
