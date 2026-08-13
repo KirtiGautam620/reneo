@@ -434,10 +434,61 @@ Routing rules: writes and consistency-critical reads to the primary; read-heavy 
 
 ### D2. What I did not have time to do
 
-_TODO._
+Within the 8-hour scope I prioritised the areas the brief weights most heavily — transactional order creation, concurrency safety, RLS, idempotency and automated tests. The following were left deliberately rather than overlooked, and each is listed with the risk it carries.
+
+**1. Atomic product creation**
+
+`POST /products` inserts the product row and its inventory row as two separate round trips. `supabase-js` has no transaction API, so these cannot be made atomic from Node.
+
+*Risk:* if the second insert fails, a product exists with no inventory row. I observed exactly this during development, when the `inventory` INSERT policy was missing — the product was created, the inventory insert was denied by RLS, and the result was a product that appears in search but has no stock record behind it.
+
+*Fix:* move both inserts into a `create_product` plpgsql function, the same pattern already used for `create_order`. This is a 30-minute change and is the first thing I would do.
+
+**2. Multiple outbox workers**
+
+The outbox worker is a single polling instance.
+
+*Risk:* a single point of failure. If the worker dies, orders continue to be created correctly but no seller is ever notified — the events accumulate silently. Running a second instance is not a fix as things stand: both would claim the same rows and deliver duplicates.
+
+*Fix:* claim batches inside a plpgsql function using `FOR UPDATE SKIP LOCKED`, so concurrent workers take disjoint sets of events. Consumers must also be idempotent, since the outbox guarantees at-least-once and not exactly-once delivery.
+
+**3. Retry backoff**
+
+Failed deliveries are retried on a fixed 5-second interval up to `MAX_ATTEMPTS`.
+
+*Risk:* a permanently failing downstream endpoint is hammered every 5 seconds, adding load to a service that is likely already struggling.
+
+*Fix:* a `next_attempt_at` column with exponential backoff, and an explicit terminal dead-letter state rather than relying on rows silently dropping out of the worker's query.
+
+**4. Idempotency key cleanup**
+
+Keys are written but never removed.
+
+*Risk:* the table grows monotonically. Nothing breaks soon, but after a year it holds millions of rows that serve no purpose and slow down maintenance operations.
+
+*Fix:* a scheduled job (pg_cron) deleting keys older than the 24-hour retention window. `idempotency_keys_created_at_idx` already supports the query.
+
+**5. Two smaller issues I would also address**
+
+- `create_order` hashes the request payload with `md5`. There is no attack surface here — the key column already has a unique constraint, so a collision cannot create or replay an order that a different key would not have created anyway — but `sha256` is the correct default and costs nothing.
+- The test suite runs against the same database as development. Tests create and delete their own users with unique emails and clean up afterwards, but an isolated test database would be the correct arrangement; as it stands a failed run can leave fixtures behind.
 
 ### D3. Where I used a library or an AI assistant for something I could not have written myself
 
-_TODO. The brief says an honest answer costs nothing — be specific about what you didn't know, and what you understood afterwards._
+I used AI assistance primarily as a learning and review tool rather than treating generated code as a black box.
+
+The main area where I used AI-generated code was the PL/pgSQL create_order function, since this was my first time writing a database function for transactional order creation. Initially I did not fully understand why the conditional inventory update was safe under concurrency. After tracing two concurrent transactions, I understood that the update combines the stock condition and decrement into one database operation. A transaction modifying the same inventory row holds the relevant lock, while the competing transaction waits and subsequently evaluates the condition against the current value. This helped me understand why this is safer than a separate read-then-write implementation.
+
+I also used AI while learning PostgreSQL RLS policies. In particular, I learned the distinction between USING and WITH CHECK: USING controls which existing rows a role can access, while WITH CHECK validates the resulting row for inserts or updates. This made me understand why ownership must be enforced not only when selecting a row but also when changing its ownership-related fields.
+
+I also learned why SECURITY DEFINER functions need a controlled search_path. Since such a function executes with the function owner's privileges, predictable object resolution is important to avoid security problems caused by relying on an uncontrolled search path.
+
+For pagination, I used AI to clarify the tradeoff between offset pagination and keyset pagination and learned why keyset pagination is more suitable for large datasets when a stable ordering/cursor is available.
+
+I also used AI to help organize my scaling discussion in Part D1. I then related the suggestions back to the actual architecture rather than adding technologies without a specific problem to solve.
+
+The main lesson from using AI was that generated code is not enough. For example, I initially accepted the PL/pgSQL function without fully understanding its concurrency properties. I had to trace the database behavior myself before I could explain why it was correct. I would therefore consider understanding and being able to explain the generated implementation more important than the fact that AI helped produce the initial version.
+
+One thing I understand in principle but have not verified experimentally is deadlock avoidance. I sort product IDs before locking so that concurrent multi-item orders acquire locks in the same order, but I have not constructed a test that actually reproduces a deadlock without it.
 
 ---
