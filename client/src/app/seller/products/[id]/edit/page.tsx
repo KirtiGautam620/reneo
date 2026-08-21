@@ -128,13 +128,13 @@ function DetailsForm({ product }: { product: ProductWithInventory }) {
       </label>
 
       {updateProduct.isError && !hasFieldErrors(updateProduct.error) && (
-        <p className={`${styles.notice} ${styles.error}`} role="alert">
+        <p className={`${styles.notice} ${styles.error} ${styles.stackMd}`} role="alert">
           {describeSellerError(updateProduct.error)}
         </p>
       )}
 
       {saved && (
-        <p className={`${styles.notice} ${styles.success}`} role="status">
+        <p className={`${styles.notice} ${styles.success} ${styles.stackMd}`} role="status">
           Changes saved.
         </p>
       )}
@@ -162,15 +162,15 @@ function StockSection({ product }: { product: ProductWithInventory }) {
   return (
     <section className={styles.section}>
       <h2 className={styles.sectionTitle}>Stock</h2>
-      <p className={styles.hint} style={{ marginTop: 6 }}>
+      <p className={`${styles.hint} ${styles.stackSm}`}>
         Stock lives on the inventory relation, not the product, and is changed by
         a relative amount — an order that takes stock while you are typing is
         added to rather than overwritten. Currently {product.inventory.quantity}{' '}
         in stock.
       </p>
 
-      <div className={styles.row} style={{ marginTop: 14 }}>
-        <label className={styles.field} style={{ flex: '0 1 160px' }}>
+      <div className={`${styles.row} ${styles.stackMd}`}>
+        <label className={`${styles.field} ${styles.deltaField}`}>
           <span className={styles.label}>Change by</span>
           <input
             className={styles.input}
@@ -195,13 +195,13 @@ function StockSection({ product }: { product: ProductWithInventory }) {
       </div>
 
       {adjustInventory.isError && (
-        <p className={`${styles.notice} ${styles.error}`} role="alert" style={{ marginTop: 14 }}>
+        <p className={`${styles.notice} ${styles.error} ${styles.stackMd}`} role="alert">
           {describeSellerError(adjustInventory.error)}
         </p>
       )}
 
       {adjustInventory.isSuccess && (
-        <p className={`${styles.notice} ${styles.success}`} role="status" style={{ marginTop: 14 }}>
+        <p className={`${styles.notice} ${styles.success} ${styles.stackMd}`} role="status">
           Stock is now {adjustInventory.data.quantity}.
         </p>
       )}
@@ -216,7 +216,7 @@ function ArchiveSection({ product }: { product: ProductWithInventory }) {
   return (
     <section className={styles.section}>
       <h2 className={styles.sectionTitle}>Archive</h2>
-      <p className={styles.hint} style={{ marginTop: 6 }}>
+      <p className={`${styles.hint} ${styles.stackSm}`}>
         {/* Soft delete: order_items references this product, so the row must
             survive or order history would be destroyed. */}
         Archiving sets the status to ARCHIVED — it hides the product from the
@@ -224,7 +224,7 @@ function ArchiveSection({ product }: { product: ProductWithInventory }) {
         keep referring to it.
       </p>
 
-      <div style={{ marginTop: 14 }}>
+      <div className={styles.stackMd}>
         <button
           type="button"
           className={`${styles.secondary} ${styles.danger}`}
@@ -240,7 +240,7 @@ function ArchiveSection({ product }: { product: ProductWithInventory }) {
       </div>
 
       {archiveProduct.isError && (
-        <p className={`${styles.notice} ${styles.error}`} role="alert" style={{ marginTop: 14 }}>
+        <p className={`${styles.notice} ${styles.error} ${styles.stackMd}`} role="alert">
           {describeSellerError(archiveProduct.error)}
         </p>
       )}
@@ -270,7 +270,7 @@ export default function EditProductPage({
         <Link href="/seller/products" className={styles.back}>
           ← Products
         </Link>
-        <p className={`${styles.notice} ${styles.error}`} role="alert">
+        <p className={`${styles.notice} ${styles.error} ${styles.stackMd}`} role="alert">
           {describeSellerError(error)}
         </p>
       </main>

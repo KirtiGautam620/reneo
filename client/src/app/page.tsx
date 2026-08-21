@@ -22,12 +22,12 @@ const ALL_CATEGORIES = '';
 function CardSkeleton() {
   return (
     <div className={styles.card}>
-      <Skeleton width="35%" height={13} />
-      <Skeleton width="75%" height={20} />
-      <Skeleton width="100%" height={19} />
+      <Skeleton width="35%" height="var(--space-3)" />
+      <Skeleton width="75%" height="var(--space-5)" />
+      <Skeleton width="100%" height="var(--space-5)" />
       <span className={styles.cardFooter}>
-        <Skeleton width="45%" height={21} />
-        <Skeleton width="25%" height={16} />
+        <Skeleton width="45%" height="var(--space-6)" />
+        <Skeleton width="25%" height="var(--space-4)" />
       </span>
     </div>
   );
@@ -80,7 +80,7 @@ export default function MarketplacePage() {
       <main className={styles.page}>
         <h1 className={styles.heading}>Marketplace</h1>
         <p className={styles.subheading}>Browse products from every seller.</p>
-        <p className={styles.notice} style={{ marginTop: 24 }}>
+        <p className={`${styles.notice} ${styles.noticeTop}`}>
           The marketplace is only visible to signed-in accounts.{' '}
           <Link href="/login" className={styles.noticeLink}>
             Log in
@@ -230,7 +230,7 @@ export default function MarketplacePage() {
           next page's placeholders render below the existing grid. */}
       {isFetchingNextPage && (
         <SkeletonRegion label="Loading more products">
-          <div className={styles.grid} style={{ marginTop: 16 }}>
+          <div className={`${styles.grid} ${styles.moreSkeleton}`}>
             {Array.from({ length: 4 }, (_, index) => (
               <CardSkeleton key={index} />
             ))}

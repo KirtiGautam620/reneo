@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase/client';
 import { useCart } from '@/hooks/use-cart';
 import { useSession } from '@/hooks/use-session';
+import { CART_RECEIVED_EVENT, CART_TARGET_ATTR } from '@/lib/motion/fly-to-cart';
 import styles from './Header.module.css';
 
 function CartIcon() {
@@ -31,6 +32,27 @@ export function Header() {
   const { itemCount } = useCart();
   const { user, role, profile, isLoading } = useSession();
   const [signingOut, setSigningOut] = useState(false);
+  const badgeRef = useRef<HTMLSpanElement>(null);
+
+  /**
+   * The catch. The flight fires this once the chip actually reaches the cart,
+   * so the badge reacts on arrival rather than on click. Driven through the DOM
+   * rather than state because it is presentation only — re-rendering the header
+   * to play an animation would be the wrong tool.
+   */
+  useEffect(() => {
+    function onReceived() {
+      const badge = badgeRef.current;
+      if (!badge) return;
+      badge.classList.remove(styles.badgeReceived);
+      // Force a reflow so the class re-application restarts the animation.
+      void badge.offsetWidth;
+      badge.classList.add(styles.badgeReceived);
+    }
+
+    window.addEventListener(CART_RECEIVED_EVENT, onReceived);
+    return () => window.removeEventListener(CART_RECEIVED_EVENT, onReceived);
+  }, []);
 
   async function handleLogout() {
     setSigningOut(true);
@@ -111,6 +133,7 @@ export function Header() {
       <Link
         href="/cart"
         className={styles.cart}
+        {...{ [CART_TARGET_ATTR]: true }}
         aria-label={
           itemCount > 0 ? `Cart, ${itemCount} item${itemCount === 1 ? '' : 's'}` : 'Cart, empty'
         }
@@ -120,7 +143,7 @@ export function Header() {
         {/* Zero during server render and first paint — the cart lives in
             localStorage, which does not exist until the client takes over. */}
         {itemCount > 0 && (
-          <span className={styles.badge} aria-hidden="true">
+          <span ref={badgeRef} className={styles.badge} aria-hidden="true">
             {itemCount}
           </span>
         )}

@@ -1,28 +1,28 @@
 .page {
   width: 100%;
-  max-width: 560px;
+  max-width: var(--container-sm);
   margin: 0 auto;
-  padding: 96px 24px;
+  padding: var(--space-12) var(--space-6);
   text-align: center;
 }
 
 .code {
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: 1.2px;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wide);
   color: var(--text-secondary);
 }
 
 .title {
-  margin-top: 10px;
-  font-size: 26px;
-  font-weight: 650;
-  letter-spacing: -0.6px;
+  margin-top: var(--space-3);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
 }
 
 .detail {
-  margin-top: 12px;
-  font-size: 15px;
+  margin-top: var(--space-3);
+  font-size: var(--text-base);
   line-height: 1.65;
   color: var(--text-secondary);
 }
@@ -30,26 +30,26 @@
 .actions {
   display: flex;
   justify-content: center;
-  gap: 12px;
-  margin-top: 28px;
+  gap: var(--space-3);
+  margin-top: var(--space-7);
 }
 
 .primary {
-  padding: 10px 22px;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-6);
+  border: var(--stroke-thin) solid transparent;
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--accent-foreground);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   cursor: pointer;
 }
 
 .secondary {
-  padding: 10px 20px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-5);
+  border: var(--stroke-thin) solid var(--border-strong);
+  border-radius: var(--radius-md);
   background: var(--surface);
-  font-weight: 550;
+  font-weight: var(--weight-medium);
   cursor: pointer;
 }
 
@@ -58,9 +58,9 @@
 }
 
 .digest {
-  margin-top: 24px;
+  margin-top: var(--space-6);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: var(--text-2xs);
   color: var(--text-secondary);
   word-break: break-all;
 }

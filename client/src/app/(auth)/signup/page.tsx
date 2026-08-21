@@ -5,6 +5,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
 import type { UserRole } from '@/hooks/use-session';
+import styles from '../auth.module.css';
+
+const ROLES: { value: UserRole; title: string; hint: string }[] = [
+  { value: 'CUSTOMER', title: 'Buy products', hint: 'Browse the marketplace and place orders.' },
+  { value: 'SELLER', title: 'Sell products', hint: 'Open a store and list your own products.' },
+];
 
 export default function SignupPage() {
   const router = useRouter();
@@ -15,22 +21,21 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function handleSubmit() {
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
     setError(null);
     setBusy(true);
 
-    const { error } = await supabase.auth.signUp({
+    const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: { role, full_name: fullName },
-      },
+      options: { data: { role, full_name: fullName } },
     });
 
     setBusy(false);
 
-    if (error) {
-      setError(error.message);
+    if (signUpError) {
+      setError(signUpError.message);
       return;
     }
 
@@ -38,60 +43,93 @@ export default function SignupPage() {
   }
 
   return (
-    <main>
-      <h1>Create account</h1>
+    <main className={styles.page}>
+      <h1 className={styles.heading}>Create your account</h1>
+      <p className={styles.subheading}>
+        One account, either side of the marketplace.
+      </p>
 
-      <label>
-        Full name
-        <input value={fullName} onChange={(e) => setFullName(e.target.value)} />
-      </label>
-
-      <label>
-        Email
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-      </label>
-
-      <label>
-        Password
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-      </label>
-
-      <fieldset>
-        <legend>I want to</legend>
-        <label>
+      <form className={styles.form} onSubmit={handleSubmit}>
+        <label className={styles.field}>
+          <span className={styles.label}>Full name</span>
           <input
-            type="radio"
-            checked={role === 'CUSTOMER'}
-            onChange={() => setRole('CUSTOMER')}
+            className={styles.input}
+            autoComplete="name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            required
           />
-          Buy products
         </label>
-        <label>
+
+        <label className={styles.field}>
+          <span className={styles.label}>Email</span>
           <input
-            type="radio"
-            checked={role === 'SELLER'}
-            onChange={() => setRole('SELLER')}
+            className={styles.input}
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
           />
-          Sell products
         </label>
-      </fieldset>
 
-      {error && <p role="alert">{error}</p>}
+        <label className={styles.field}>
+          <span className={styles.label}>Password</span>
+          <input
+            className={styles.input}
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </label>
 
-      <button onClick={handleSubmit} disabled={busy || !email || !password}>
-        {busy ? 'Creating…' : 'Create account'}
-      </button>
+        <fieldset>
+          <legend className={styles.rolesLegend}>I want to</legend>
+          <div className={styles.roles}>
+            {ROLES.map((option) => (
+              <label
+                key={option.value}
+                className={`${styles.role} ${
+                  role === option.value ? styles.roleSelected : ''
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="role"
+                  checked={role === option.value}
+                  onChange={() => setRole(option.value)}
+                />
+                <span>
+                  <span className={styles.roleTitle}>{option.title}</span>
+                  <span className={styles.roleHint}>{option.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
-      <p>
-        Already have an account? <Link href="/login">Log in</Link>
+        {error && (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          className={styles.submit}
+          disabled={busy || !email || !password || !fullName}
+        >
+          {busy ? 'Creating…' : 'Create account'}
+        </button>
+      </form>
+
+      <p className={styles.alt}>
+        Already have an account?{' '}
+        <Link href="/login" className={styles.altLink}>
+          Log in
+        </Link>
       </p>
     </main>
   );

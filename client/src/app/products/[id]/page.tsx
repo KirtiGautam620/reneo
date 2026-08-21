@@ -1,10 +1,11 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useProduct } from '@/hooks/use-products';
 import { useCart } from '@/hooks/use-cart';
 import { formatMoney } from '@/lib/format';
+import { flyToCart } from '@/lib/motion/fly-to-cart';
 import { ApiError } from '@/lib/api-client';
 import styles from './page.module.css';
 
@@ -19,6 +20,7 @@ export default function ProductDetailPage({
 
   const [quantity, setQuantity] = useState(1);
   const [justAdded, setJustAdded] = useState(false);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
 
   const inCart = items.find((item) => item.product_id === id)?.quantity ?? 0;
 
@@ -35,7 +37,7 @@ export default function ProductDetailPage({
     return (
       <main className={styles.page}>
         <Link href="/" className={styles.back}>
-          ← Catalogue
+          ← Marketplace
         </Link>
         <p className={`${styles.notice} ${styles.error}`} role="alert">
           {notFound
@@ -55,12 +57,22 @@ export default function ProductDetailPage({
   function handleAdd() {
     addItem(id, quantity);
     setJustAdded(true);
+
+    // Send the product itself to the cart, so the count in the corner changing
+    // has a visible cause.
+    if (addButtonRef.current && product) {
+      flyToCart(
+        addButtonRef.current,
+        product.name,
+        formatMoney(product.price_minor * quantity, product.currency)
+      );
+    }
   }
 
   return (
     <main className={styles.page}>
       <Link href="/" className={styles.back}>
-        ← Catalogue
+        ← Marketplace
       </Link>
 
       <p className={styles.category}>{product.category}</p>
@@ -107,6 +119,7 @@ export default function ProductDetailPage({
         />
 
         <button
+          ref={addButtonRef}
           type="button"
           className={styles.add}
           onClick={handleAdd}

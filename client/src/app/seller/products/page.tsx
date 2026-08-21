@@ -110,8 +110,7 @@ export default function SellerProductsPage() {
       {products.hasNextPage && (
         <button
           type="button"
-          className={styles.secondary}
-          style={{ marginTop: 20 }}
+          className={`${styles.secondary} ${styles.stackLg}`}
           onClick={() => void products.fetchNextPage()}
           disabled={products.isFetchingNextPage}
         >

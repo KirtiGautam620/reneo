@@ -98,7 +98,7 @@ export default function OrderDetailPage({
       <p className={styles.metaId}>{order.id}</p>
 
       {multiSeller && (
-        <p className={styles.subheading} style={{ marginTop: 14 }}>
+        <p className={`${styles.subheading} ${styles.stackMd}`}>
           This order is fulfilled by {groups.length} sellers.
         </p>
       )}

@@ -1,65 +1,225 @@
+/* =========================================================================
+   Reneo design tokens.
+   Every value used anywhere in the app is defined here. Components reference
+   these and nothing else — no literal colours, spacing or timings live in a
+   CSS module.
+   ========================================================================= */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ── Type ───────────────────────────────────────────────────────────────
+     A pairing, not a single family: Fraunces — a variable serif with optical
+     sizing — carries headings and prices, while Inter does the interface work
+     it is built for. The contrast is what stops a commerce page reading like a
+     dashboard. Both are loaded and self-hosted by next/font in layout.tsx. */
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --surface: #ffffff;
-  --surface-muted: #f6f6f7;
-  --border: #e4e4e7;
-  --border-strong: #d0d0d6;
+  /* Modular scale, ratio 1.2 (minor third) from a 1rem base. */
+  --text-2xs: 0.694rem;
+  --text-xs: 0.833rem;
+  --text-sm: 0.9rem;
+  --text-base: 1rem;
+  --text-md: 1.2rem;
+  --text-lg: 1.44rem;
+  --text-xl: 1.728rem;
+  --text-2xl: 2.074rem;
+  --text-3xl: 2.488rem;
 
-  --text-primary: #171717;
-  --text-secondary: #6b6b76;
+  --leading-none: 1;
+  --leading-tight: 1.18;
+  --leading-snug: 1.35;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.75;
 
-  --accent: #171717;
-  --accent-foreground: #ffffff;
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.06em;
 
-  --danger: #b42318;
-  --danger-surface: #fef3f2;
-  --danger-border: #fda29b;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
 
-  --warning: #93591b;
-  --warning-surface: #fffaeb;
-  --warning-border: #fedf89;
+  /* Line length. Prose past ~70 characters is measurably harder to track back
+     from the end of one line to the start of the next. */
+  --measure: 68ch;
+  --measure-tight: 46ch;
 
-  --success: #067647;
-  --success-surface: #ecfdf3;
-  --success-border: #abefc6;
+  /* ── Spacing ────────────────────────────────────────────────────────────
+     4px base. Named by step, not by use, so the rhythm stays visible. */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 2rem;
+  --space-8: 2.5rem;
+  --space-9: 3rem;
+  --space-10: 4rem;
+  --space-11: 5rem;
+  --space-12: 6rem;
 
-  --radius: 10px;
+  /* ── Strokes, radii, elevation ──────────────────────────────────────── */
+  --stroke-thin: 1px;
+  --stroke-thick: 3px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  /* Small physical constants used by interaction states. */
+  --lift: 2px;
+  --blur-panel: 12px;
+
+  --shadow-sm: 0 1px 2px rgb(16 16 20 / 6%);
+  --shadow-md: 0 2px 4px rgb(16 16 20 / 5%), 0 6px 16px rgb(16 16 20 / 7%);
+  --shadow-lg: 0 8px 24px rgb(16 16 20 / 10%), 0 2px 6px rgb(16 16 20 / 6%);
+  --shadow-focus: 0 0 0 3px var(--accent-ring);
+
+  /* ── Motion ─────────────────────────────────────────────────────────── */
+  --duration-instant: 90ms;
+  --duration-fast: 160ms;
+  --duration-base: 260ms;
+  --duration-slow: 420ms;
+  --duration-flight: 620ms;
+
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0.05, 0.36, 1);
+  /* Overshoots slightly — used only where a gesture should feel physical. */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Layout ─────────────────────────────────────────────────────────── */
+  --container-sm: 34rem;
+  --container-md: 48rem;
+  --container-lg: 60rem;
+  --container-xl: 70rem;
+
+  /* ── Colour: neutral ramp ───────────────────────────────────────────────
+     Warm greys. A neutral with a little yellow in it sits better beside the
+     terracotta accent than a pure blue-grey would. */
+  --neutral-0: #ffffff;
+  --neutral-25: #fbfaf9;
+  --neutral-50: #f6f5f3;
+  --neutral-100: #edebe8;
+  --neutral-200: #e0ddd8;
+  --neutral-300: #cbc7c0;
+  --neutral-400: #a8a29a;
+  --neutral-500: #837d75;
+  --neutral-600: #635e58;
+  --neutral-700: #474340;
+  --neutral-800: #2c2a27;
+  --neutral-900: #1a1917;
+  --neutral-950: #111010;
+
+  /* Accent: burnt terracotta — warm, and legible on both grounds. */
+  --accent-100: #fbe9e2;
+  --accent-300: #f0b39c;
+  --accent-500: #c2552c;
+  --accent-600: #a8451f;
+  --accent-700: #8a3717;
+  --accent-ring: rgb(194 85 44 / 28%);
+
+  /* ── Colour: semantic roles ─────────────────────────────────────────── */
+  --background: var(--neutral-25);
+  --surface: var(--neutral-0);
+  --surface-muted: var(--neutral-50);
+  --surface-sunken: var(--neutral-100);
+
+  --border: var(--neutral-200);
+  --border-strong: var(--neutral-300);
+
+  --text-primary: var(--neutral-900);
+  --text-secondary: var(--neutral-600);
+  --text-tertiary: var(--neutral-500);
+  --text-inverse: var(--neutral-0);
+
+  --accent: var(--accent-500);
+  --accent-hover: var(--accent-600);
+  --accent-foreground: var(--neutral-0);
+  --accent-surface: var(--accent-100);
+
+  --success: #216e4e;
+  --success-surface: #e9f6ef;
+  --success-border: #a6d9bf;
+
+  --warning: #8a5a12;
+  --warning-surface: #fdf4e3;
+  --warning-border: #edcf95;
+
+  --danger: #a72f26;
+  --danger-surface: #fdeeec;
+  --danger-border: #efb4ad;
+
+  --skeleton-base: var(--neutral-100);
+  --skeleton-sheen: var(--neutral-200);
+
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Only the role tokens are reassigned — the ramps above are fixed, so a
+       component never needs to know which mode it is in. */
+    --background: var(--neutral-950);
+    --surface: var(--neutral-900);
+    --surface-muted: var(--neutral-800);
+    --surface-sunken: var(--neutral-800);
 
-    --surface: #131315;
-    --surface-muted: #1a1a1d;
-    --border: #2a2a2f;
-    --border-strong: #3a3a42;
+    --border: #33302c;
+    --border-strong: #4a4641;
 
-    --text-primary: #ededed;
-    --text-secondary: #a1a1ac;
+    --text-primary: var(--neutral-100);
+    --text-secondary: var(--neutral-400);
+    --text-tertiary: var(--neutral-500);
+    --text-inverse: var(--neutral-950);
 
-    --accent: #ededed;
-    --accent-foreground: #0a0a0a;
+    --accent: #e8815a;
+    --accent-hover: #f09a78;
+    --accent-foreground: var(--neutral-950);
+    --accent-surface: #3a1f14;
+    --accent-ring: rgb(232 129 90 / 32%);
 
-    --danger: #fda29b;
-    --danger-surface: #2a1412;
-    --danger-border: #7a271a;
+    --success: #7bd0a5;
+    --success-surface: #12241b;
+    --success-border: #2c5741;
 
-    --warning: #fedf89;
-    --warning-surface: #241c0c;
-    --warning-border: #7a5a10;
+    --warning: #e8c583;
+    --warning-surface: #2a2013;
+    --warning-border: #5c4720;
 
-    --success: #75e0a7;
-    --success-surface: #0d2419;
-    --success-border: #175c3a;
+    --danger: #f0a49a;
+    --danger-surface: #2c1613;
+    --danger-border: #6b2f28;
+
+    --skeleton-base: var(--neutral-800);
+    --skeleton-sheen: #3a3733;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+    --shadow-md: 0 2px 4px rgb(0 0 0 / 35%), 0 6px 16px rgb(0 0 0 / 45%);
+    --shadow-lg: 0 8px 24px rgb(0 0 0 / 55%), 0 2px 6px rgb(0 0 0 / 40%);
+
+    color-scheme: dark;
   }
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 html {
   height: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 html,
@@ -72,17 +232,25 @@ body {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
   background: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  /* Fraunces is variable: soften the optical axis and keep it low-contrast at
+     interface sizes rather than letting it turn into a display face. */
+  font-variation-settings: "SOFT" 20, "WONK" 0;
 }
 
 a {
@@ -92,13 +260,73 @@ a {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: inherit;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+button {
+  cursor: pointer;
+}
+
+/* One visible focus treatment for the whole app. */
+:focus-visible {
+  outline: var(--stroke-thick) solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Money and counts must not jitter as digits change. */
+[data-numeric] {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
+}
+
+/* ── The flying chip ──────────────────────────────────────────────────────
+   Lives on <body> during the add-to-cart flight, so it is not clipped by any
+   card's overflow and is not subject to a stacking context on the page. */
+.flying-chip {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: var(--stroke-thin) solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--accent-surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  overflow: hidden;
+  will-change: transform, opacity;
+}
+
+.flying-chip__name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-none);
+}
+
+.flying-chip__price {
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-none);
 }

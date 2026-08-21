@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
+import styles from '../auth.module.css';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,19 +13,20 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function handleSubmit() {
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
     setError(null);
     setBusy(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     setBusy(false);
 
-    if (error) {
-      setError(error.message);
+    if (signInError) {
+      setError(signInError.message);
       return;
     }
 
@@ -33,35 +35,57 @@ export default function LoginPage() {
   }
 
   return (
-    <main>
-      <h1>Log in</h1>
+    <main className={styles.page}>
+      <h1 className={styles.heading}>Welcome back</h1>
+      <p className={styles.subheading}>
+        Log in to browse the marketplace and see your orders.
+      </p>
 
-      <label>
-        Email
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-      </label>
+      <form className={styles.form} onSubmit={handleSubmit}>
+        <label className={styles.field}>
+          <span className={styles.label}>Email</span>
+          <input
+            className={styles.input}
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </label>
 
-      <label>
-        Password
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-      </label>
+        <label className={styles.field}>
+          <span className={styles.label}>Password</span>
+          <input
+            className={styles.input}
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </label>
 
-      {error && <p role="alert">{error}</p>}
+        {error && (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        )}
 
-      <button onClick={handleSubmit} disabled={busy || !email || !password}>
-        {busy ? 'Logging in…' : 'Log in'}
-      </button>
+        <button
+          type="submit"
+          className={styles.submit}
+          disabled={busy || !email || !password}
+        >
+          {busy ? 'Logging in…' : 'Log in'}
+        </button>
+      </form>
 
-      <p>
-        No account? <Link href="/signup">Sign up</Link>
+      <p className={styles.alt}>
+        No account?{' '}
+        <Link href="/signup" className={styles.altLink}>
+          Sign up
+        </Link>
       </p>
     </main>
   );

@@ -1,34 +1,39 @@
 .header {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 20;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: var(--stroke-thin) solid var(--border);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(var(--blur-panel));
 }
 
 .brand {
   margin-right: auto;
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: -0.3px;
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  font-variation-settings: "SOFT" 40, "WONK" 1;
 }
 
 .nav {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .link {
-  padding: 7px 11px;
-  border-radius: var(--radius);
-  font-size: 14px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
   color: var(--text-secondary);
   white-space: nowrap;
+  transition: color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
 }
 
 .link:hover {
@@ -37,23 +42,24 @@
 }
 
 .user {
-  max-width: 180px;
+  max-width: var(--container-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 0 6px 0 10px;
-  font-size: 14px;
-  font-weight: 550;
+  padding: var(--space-0) var(--space-2) var(--space-0) var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
 .logout {
-  padding: 7px 11px;
+  padding: var(--space-2) var(--space-3);
   border: none;
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   background: transparent;
-  font-size: 14px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
-  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
 }
 
 .logout:hover:not(:disabled) {
@@ -67,12 +73,13 @@
 }
 
 .signup {
-  padding: 7px 13px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  font-size: 14px;
-  font-weight: 550;
+  padding: var(--space-2) var(--space-4);
+  border: var(--stroke-thin) solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   color: var(--text-primary);
+  transition: background-color var(--duration-fast) var(--ease-out);
 }
 
 .signup:hover {
@@ -80,52 +87,84 @@
 }
 
 .cart {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin-left: 6px;
-  padding: 7px 13px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  font-size: 14px;
-  font-weight: 600;
+  gap: var(--space-2);
+  margin-left: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: var(--stroke-thin) solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  transition: background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
 }
 
 .cart:hover {
   background: var(--surface-muted);
+  border-color: var(--text-tertiary);
 }
 
 .cartIcon {
   display: block;
-  width: 17px;
-  height: 17px;
+  width: var(--space-4);
+  height: var(--space-4);
 }
 
 .badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
+  min-width: var(--space-5);
+  height: var(--space-5);
+  padding: var(--space-0) var(--space-2);
+  border-radius: var(--radius-full);
   background: var(--accent);
   color: var(--accent-foreground);
-  font-size: 12px;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
   font-variant-numeric: tabular-nums;
 }
 
 /*
- * Holds the auth controls' width while the session resolves, so the rest of the
- * bar does not jump sideways once they appear.
+ * The receiving half of the add-to-cart gesture: the badge takes the weight of
+ * the arriving item and settles. Deliberately overshoots — the spring easing is
+ * what sells it as a catch rather than a re-render.
  */
-.authPlaceholder {
-  width: 132px;
+.badgeReceived {
+  animation: catch var(--duration-base) var(--ease-spring);
 }
 
+@keyframes catch {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.45);
+    background: var(--accent-hover);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Placeholder that reserves the auth controls' width while the session
+   resolves, so nothing slides sideways when they appear. */
+.authPlaceholder {
+  width: var(--space-12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badgeReceived {
+    animation: none;
+  }
+}
+
+/* Breakpoints stay literal: a media query cannot read a custom property. */
 @media (max-width: 560px) {
   .header {
-    padding: 12px 14px;
+    padding: var(--space-3) var(--space-4);
   }
 
   .user,

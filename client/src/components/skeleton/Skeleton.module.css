@@ -1,18 +1,18 @@
 .block {
   display: block;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: linear-gradient(
     90deg,
-    var(--surface-muted) 0%,
-    var(--border) 50%,
-    var(--surface-muted) 100%
+    var(--skeleton-base) 0%,
+    var(--skeleton-sheen) 50%,
+    var(--skeleton-base) 100%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
+  animation: shimmer 1.4s var(--ease-in-out) infinite;
 }
 
 .pill {
-  border-radius: 999px;
+  border-radius: var(--radius-full);
 }
 
 @keyframes shimmer {
@@ -24,10 +24,10 @@
   }
 }
 
-/* Respect a reduced-motion preference: keep the placeholder, drop the sweep. */
+/* Keep the placeholder, drop the sweep. */
 @media (prefers-reduced-motion: reduce) {
   .block {
     animation: none;
-    background: var(--surface-muted);
+    background: var(--skeleton-base);
   }
 }
