@@ -19,13 +19,32 @@ export const app=express();
 //
 //   CORS_ORIGINS=https://reneo-delta.vercel.app,https://reneo-*.vercel.app
 //
-// The default covers local development only. A deployed API that has not been
-// given this variable will refuse the browser, which is the safe direction to
-// fail but needs to be visible — hence the logging below.
-const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:3000,http://localhost:3001')
-  .split(',')
+// Defaults cover local development *and* this project's own deployed
+// frontend, so the API works without configuration. Relying on an env var
+// alone made a forgotten setting look like a broken app, with the only symptom
+// a CORS message in the browser console.
+//
+// These stay an explicit allow-list rather than a reflect-everything wildcard.
+// CORS is weak protection for a bearer-token API — an attacker's page cannot
+// read another origin's token — but a named list documents who the client is,
+// and costs nothing.
+const DEFAULT_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'https://reneo-delta.vercel.app',   // production frontend
+  'https://reneo-*.vercel.app',       // Vercel preview deployments
+];
+
+// CORS_ORIGINS, when set, is *added* to the defaults rather than replacing
+// them: the previous behaviour meant setting it for a new environment silently
+// cut off the existing one.
+const allowedOrigins = [
+  ...DEFAULT_ORIGINS,
+  ...(process.env.CORS_ORIGINS ?? '').split(','),
+]
   .map(o => o.trim().replace(/\/+$/, ''))   // tolerate a trailing slash in config
-  .filter(Boolean);
+  .filter(Boolean)
+  .filter((origin, index, all) => all.indexOf(origin) === index);
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

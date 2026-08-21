@@ -235,10 +235,12 @@ build- or boot-time:
 - **Frontend host** (e.g. Vercel): `NEXT_PUBLIC_API_URL` must be the API's public
   origin. It is inlined at build time, so changing it requires a redeploy, not
   just a restart.
-- **API host** (e.g. Render): `CORS_ORIGINS` must include the frontend's origin,
-  or every browser request fails its preflight with *"No
-  'Access-Control-Allow-Origin' header is present"*. The API logs its allow-list
-  at boot and logs every refused origin, so this is one log line to diagnose.
+- **API host** (e.g. Render): the frontend's origin must be in the CORS
+  allow-list, or every browser request fails its preflight with *"No
+  'Access-Control-Allow-Origin' header is present"*. Known origins are compiled
+  in as defaults so this works without configuration; `CORS_ORIGINS` adds more.
+  The API logs its allow-list at boot and logs every refused origin, so a
+  mismatch is one log line rather than a console hunt.
 
 Sign up one **seller** and one **customer** account. The seller creates a store,
 adds a product with stock; the customer can then browse and buy it.
@@ -254,7 +256,7 @@ adds a product with stock; the customer can then browse and buy it.
 | `SUPABASE_SECRET_KEY` | **service role.** JWT verification, outbox worker, test fixtures. Bypasses RLS — server only |
 | `SUPABASE_JWKS_URL` | JWT verification |
 | `PORT` | API port, default 4000 |
-| `CORS_ORIGINS` | comma-separated browser origins allowed to call the API. **Required in production** — unset it defaults to the localhost dev ports, and a deployed frontend is refused at the preflight. `*` matches within a hostname segment, so `https://reneo-*.vercel.app` covers Vercel preview deployments |
+| `CORS_ORIGINS` | *optional.* Extra browser origins allowed to call the API, **added to** the built-in defaults rather than replacing them. `*` matches within a hostname segment. The defaults already cover local development and the deployed frontend, and the allow-list is logged at boot |
 
 **`client/.env.local`** — see [`client/.env.example`](client/.env.example).
 
