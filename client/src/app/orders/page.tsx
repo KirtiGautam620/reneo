@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useOrders } from '@/hooks/use-orders';
 import { useSession } from '@/hooks/use-session';
 import { Skeleton, SkeletonRegion } from '@/components/skeleton/Skeleton';
+import { GhostRows, SignedOutPanel } from '@/components/panel/SignedOutPanel';
+import { ReceiptIcon } from '@/components/panel/icons';
 import { ApiError } from '@/lib/api-client';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import type { Order, OrderStatus } from '@/types/api';
@@ -23,16 +25,45 @@ export default function OrdersPage() {
   const { user, isLoading: sessionLoading } = useSession();
   const { data, isPending, isError, error } = useOrders();
 
-  if (!sessionLoading && !user) {
+  // Hold the skeleton until it is known whether this is a list or a sign-in
+  // prompt, rather than flashing one and replacing it with the other.
+  if (sessionLoading) {
     return (
       <main className={styles.page}>
         <h1 className={styles.heading}>Your orders</h1>
-        <p className={styles.notice}>
-          <Link href="/login" className={styles.noticeLink}>
-            Log in
-          </Link>{' '}
-          to see your orders.
-        </p>
+        <SkeletonRegion label="Loading orders">
+          <ul className={styles.list}>
+            {Array.from({ length: 3 }, (_, index) => (
+              <li key={index}>
+                <span className={styles.row}>
+                  <span className={styles.rowMain}>
+                    <Skeleton width="45%" height="var(--space-5)" />
+                    <Skeleton width="70%" height="var(--space-4)" />
+                  </span>
+                  <span className={styles.rowTotal}>
+                    <Skeleton width="100%" height="var(--space-5)" />
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </SkeletonRegion>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className={styles.page}>
+        <h1 className={styles.heading}>Your orders</h1>
+        <SignedOutPanel
+          icon={<ReceiptIcon />}
+          title="Sign in to see your orders"
+          body="Your order history, line items and what you paid — visible only to your own account."
+          primary={{ href: '/login', label: 'Log in' }}
+          secondary={{ href: '/signup', label: 'Create an account' }}
+          backdrop={<GhostRows />}
+        />
       </main>
     );
   }

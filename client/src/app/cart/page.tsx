@@ -10,6 +10,8 @@ import { useSession } from '@/hooks/use-session';
 import { formatMoney } from '@/lib/format';
 import { ApiError } from '@/lib/api-client';
 import { Skeleton } from '@/components/skeleton/Skeleton';
+import { GhostRows, SignedOutPanel } from '@/components/panel/SignedOutPanel';
+import { CartIcon } from '@/components/panel/icons';
 import type { ProductWithInventory } from '@/types/api';
 import styles from './page.module.css';
 
@@ -88,17 +90,63 @@ export default function CartPage() {
     }
   }
 
-  if (!sessionLoading && !user) {
+  /*
+   * Until the session resolves it is unknown whether this person gets the cart
+   * or the sign-in panel. Rendering either one first means showing something
+   * that is then taken away — so hold a skeleton until the answer is known.
+   */
+  if (sessionLoading) {
     return (
       <main className={styles.page}>
         <h1 className={styles.heading}>Your cart</h1>
-        <p className={styles.notice}>
-          <Link href="/login" className={styles.noticeLink}>
-            Log in
-          </Link>{' '}
-          to see your cart and check out. Your cart is stored on this device and
-          will still be here.
-        </p>
+        <ul className={styles.items}>
+          {Array.from({ length: 2 }, (_, index) => (
+            <li key={index} className={styles.item}>
+              <div className={styles.itemInfo}>
+                <Skeleton width="55%" height="var(--space-5)" />
+                <span className={styles.itemMeta}>
+                  <Skeleton width="40%" height="var(--space-4)" />
+                </span>
+              </div>
+              <Skeleton width="var(--space-11)" height="var(--space-8)" />
+            </li>
+          ))}
+        </ul>
+      </main>
+    );
+  }
+
+  if (!user) {
+    /*
+     * The cart lives in localStorage, so it survives being signed out — and it
+     * is worth saying so concretely. Someone who has already chosen three items
+     * needs to know they are not about to lose them, and a count is far more
+     * reassuring than a promise that they are "still here".
+     */
+    const hasItems = itemCount > 0;
+
+    return (
+      <main className={styles.page}>
+        <h1 className={styles.heading}>Your cart</h1>
+        <SignedOutPanel
+          icon={<CartIcon />}
+          title={hasItems ? 'Log in to check out' : 'Sign in to start shopping'}
+          body={
+            hasItems ? (
+              <>
+                {itemCount} item{itemCount === 1 ? '' : 's'}{' '}
+                {itemCount === 1 ? 'is' : 'are'} saved on this device. Log in and
+                you can check out — nothing is lost in the meantime.
+              </>
+            ) : (
+              'Your cart is kept on this device. Sign in to browse the marketplace and add something to it.'
+            )
+          }
+          primary={{ href: '/login', label: 'Log in' }}
+          secondary={{ href: '/signup', label: 'Create an account' }}
+          note={hasItems ? 'Prices are confirmed by the server at checkout.' : undefined}
+          backdrop={hasItems ? <GhostRows count={Math.min(items.length, 4)} /> : undefined}
+        />
       </main>
     );
   }
