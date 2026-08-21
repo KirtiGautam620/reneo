@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useOrders } from '@/hooks/use-orders';
 import { useSession } from '@/hooks/use-session';
+import { Skeleton, SkeletonRegion } from '@/components/skeleton/Skeleton';
 import { ApiError } from '@/lib/api-client';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import type { Order, OrderStatus } from '@/types/api';
@@ -43,7 +44,27 @@ export default function OrdersPage() {
       <h1 className={styles.heading}>Your orders</h1>
       <p className={styles.subheading}>Most recent first.</p>
 
-      {isPending && <p className={styles.notice}>Loading orders…</p>}
+      {isPending && (
+        <SkeletonRegion label="Loading orders">
+          <ul className={styles.list}>
+            {Array.from({ length: 4 }, (_, index) => (
+              <li key={index}>
+                <span className={styles.row}>
+                  <span className={styles.rowMain}>
+                    <Skeleton width="45%" height={20} />
+                    <Skeleton width="70%" height={15} />
+                  </span>
+                  <Skeleton width={86} height={19} rounded />
+                  <Skeleton width={56} height={17} />
+                  <span className={styles.rowTotal}>
+                    <Skeleton width="100%" height={19} />
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </SkeletonRegion>
+      )}
 
       {isError && (
         <p className={`${styles.notice} ${styles.error}`} role="alert">
@@ -52,13 +73,12 @@ export default function OrdersPage() {
       )}
 
       {!isPending && !isError && orders.length === 0 && (
-        <p className={styles.notice}>
-          You have not placed any orders yet.{' '}
-          <Link href="/" className={styles.noticeLink}>
+        <div className={styles.notice}>
+          <p>You have not placed any orders yet.</p>
+          <Link href="/" className={styles.emptyAction}>
             Browse the marketplace
-          </Link>{' '}
-          to get started.
-        </p>
+          </Link>
+        </div>
       )}
 
       {orders.length > 0 && (

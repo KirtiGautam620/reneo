@@ -5,6 +5,7 @@ import { useOrders } from '@/hooks/use-orders';
 import { useSession } from '@/hooks/use-session';
 import { describeSellerError } from '@/lib/seller-errors';
 import { formatDateTime, formatMoney } from '@/lib/format';
+import { Skeleton, SkeletonRegion } from '@/components/skeleton/Skeleton';
 import type { Order, OrderItem, OrderStatus } from '@/types/api';
 import styles from './orders.module.css';
 
@@ -120,7 +121,35 @@ export default function SellerOrdersPage() {
         overall order total is not shown here.
       </p>
 
-      {isPending && <p className={styles.notice}>Loading orders…</p>}
+      {isPending && (
+        <SkeletonRegion label="Loading orders">
+          {Array.from({ length: 2 }, (_, index) => (
+            <section key={index} className={styles.order}>
+              <header className={styles.orderHead}>
+                <Skeleton width={170} height={20} />
+                <Skeleton width={86} height={19} rounded />
+              </header>
+              <ul className={styles.items}>
+                {Array.from({ length: 2 }, (_, row) => (
+                  <li key={row} className={styles.item}>
+                    <span className={styles.itemName}>
+                      <Skeleton width="60%" height={20} />
+                    </span>
+                    <Skeleton width={110} height={17} />
+                    <span className={styles.itemSubtotal}>
+                      <Skeleton width="100%" height={19} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className={styles.subtotal}>
+                <Skeleton width={150} height={32} />
+                <Skeleton width={110} height={22} />
+              </div>
+            </section>
+          ))}
+        </SkeletonRegion>
+      )}
 
       {isError && (
         <p className={`${styles.notice} ${styles.error}`} role="alert">
@@ -129,10 +158,15 @@ export default function SellerOrdersPage() {
       )}
 
       {!isPending && !isError && visible.length === 0 && (
-        <p className={styles.notice}>
-          No orders yet. They appear here as soon as a customer buys one of your
-          products.
-        </p>
+        <div className={styles.notice}>
+          <p>
+            No orders yet. They appear here as soon as a customer buys one of
+            your products.
+          </p>
+          <Link href="/seller/products" className={styles.emptyAction}>
+            Review your products
+          </Link>
+        </div>
       )}
 
       {visible.map(({ order, items }) => (

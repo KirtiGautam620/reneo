@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useSellerProducts } from '@/hooks/use-products';
 import { describeSellerError } from '@/lib/seller-errors';
 import { formatMoney } from '@/lib/format';
+import { Skeleton, SkeletonRegion } from '@/components/skeleton/Skeleton';
 import styles from '../seller.module.css';
 
 export default function SellerProductsPage() {
@@ -28,7 +29,28 @@ export default function SellerProductsPage() {
         </Link>
       </div>
 
-      {products.isPending && <p className={styles.notice}>Loading products…</p>}
+      {products.isPending && (
+        <SkeletonRegion label="Loading products">
+          <ul className={styles.list}>
+            {Array.from({ length: 5 }, (_, index) => (
+              <li key={index}>
+                <span className={styles.listRow}>
+                  <span className={styles.rowMain}>
+                    <Skeleton width="55%" height={20} />
+                    <Skeleton width="30%" height={17} />
+                  </span>
+                  <span className={styles.rowPrice}>
+                    <Skeleton width="100%" height={19} />
+                  </span>
+                  <span className={styles.rowStock}>
+                    <Skeleton width="100%" height={17} />
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </SkeletonRegion>
+      )}
 
       {products.isError && (
         <p className={`${styles.notice} ${styles.error}`} role="alert">

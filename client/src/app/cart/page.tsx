@@ -9,6 +9,7 @@ import { useCheckout } from '@/hooks/use-checkout';
 import { useSession } from '@/hooks/use-session';
 import { formatMoney } from '@/lib/format';
 import { ApiError } from '@/lib/api-client';
+import { Skeleton } from '@/components/skeleton/Skeleton';
 import type { ProductWithInventory } from '@/types/api';
 import styles from './page.module.css';
 
@@ -106,13 +107,12 @@ export default function CartPage() {
     return (
       <main className={styles.page}>
         <h1 className={styles.heading}>Your cart</h1>
-        <p className={styles.notice}>
-          Your cart is empty.{' '}
-          <Link href="/" className={styles.noticeLink}>
-            Browse the catalogue
+        <div className={styles.notice}>
+          <p>Your cart is empty. Products you add are kept on this device.</p>
+          <Link href="/" className={styles.emptyAction}>
+            Browse the marketplace
           </Link>
-          .
-        </p>
+        </div>
       </main>
     );
   }
@@ -141,7 +141,14 @@ export default function CartPage() {
               }`}
             >
               <div className={styles.itemInfo}>
-                {isLoading && <span className={styles.itemName}>Loading…</span>}
+                {isLoading && (
+                  <>
+                    <Skeleton width="55%" height={20} />
+                    <span className={styles.itemMeta}>
+                      <Skeleton width="40%" height={18} />
+                    </span>
+                  </>
+                )}
 
                 {!isLoading && !product && (
                   <span className={styles.itemName}>
@@ -261,7 +268,11 @@ export default function CartPage() {
       <div className={styles.summary}>
         <div>
           <p className={styles.total}>
-            {isLoadingProducts ? 'Calculating…' : formatMoney(total, currency)}
+            {isLoadingProducts ? (
+              <Skeleton width={130} height={26} />
+            ) : (
+              formatMoney(total, currency)
+            )}
           </p>
           <p className={styles.totalNote}>
             Indicative total. The server prices the order when it is placed.

@@ -170,3 +170,19 @@
   background: var(--danger-surface);
   color: var(--danger);
 }
+
+.emptyAction {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 9px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.emptyAction:hover {
+  background: var(--surface-muted);
+}

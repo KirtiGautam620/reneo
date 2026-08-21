@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import {
   useInfiniteQuery,
   useMutation,
@@ -7,7 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { api } from '@/lib/api-client';
+import { ApiError, api } from '@/lib/api-client';
 import { endpoints } from '@/lib/endpoints';
 import type {
   AdjustInventoryRequest,
@@ -34,6 +35,7 @@ export const productKeys = {
   list: (query: ProductListQuery) => [...productKeys.lists(), query] as const,
   details: () => [...productKeys.all, 'detail'] as const,
   detail: (id: string) => [...productKeys.details(), id] as const,
+  categories: () => [...productKeys.all, 'categories'] as const,
 };
 
 /* ── Reads ─────────────────────────────────────────────────────────────── */
@@ -44,14 +46,75 @@ export const productKeys = {
  * a fresh chain of pages rather than replay a stale cursor.
  */
 export function useProducts(query: ProductListQuery = {}) {
-  return useInfiniteQuery({
-    queryKey: productKeys.list(query),
+  const queryClient = useQueryClient();
+  const queryKey = productKeys.list(query);
+  // Stable dependency: the key array is rebuilt every render, but its contents
+  // only change when the filters do.
+  const keyString = JSON.stringify(queryKey);
+
+  const result = useInfiniteQuery({
+    queryKey,
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       api.get<Paginated<ProductListItem>>(
+        // The cursor goes out as `cursor`; the ordering it was issued for goes
+        // out as `sort`, and both must agree or the server returns 400.
         endpoints.products.list({ ...query, cursor: pageParam })
       ),
+    // Must be undefined, not null: react-query treats null as a valid page
+    // param and would keep fetching, whereas undefined means "no more pages".
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+  });
+
+  /**
+   * A cursor is only valid for the sort it was issued with, and the server
+   * rejects a mismatched or malformed one with 400. Because `sort` is part of
+   * the query key this should not arise in normal use — changing the sort
+   * starts a fresh chain rather than replaying an old cursor — but a cursor
+   * held across a deploy, or one that has been tampered with, would.
+   *
+   * The recovery is to drop the accumulated pages and start from the first one
+   * again, which the reader barely notices. Showing an error instead would
+   * strand them on a half-loaded list they cannot advance.
+   *
+   * Guarded on already having a good page: if the *first* request 400s — an
+   * out-of-range filter, say — there is no cursor to blame and resetting would
+   * loop for ever.
+   */
+  const rejectedCursor =
+    result.error instanceof ApiError &&
+    result.error.status === 400 &&
+    (result.data?.pages.length ?? 0) > 0;
+
+  useEffect(() => {
+    if (!rejectedCursor) return;
+    void queryClient.resetQueries({ queryKey: JSON.parse(keyString) as unknown[] });
+  }, [rejectedCursor, keyString, queryClient]);
+
+  return result;
+}
+
+/**
+ * Categories for the marketplace filter.
+ *
+ * The API has no categories endpoint, so the option list is derived from one
+ * unfiltered page of products. Two consequences worth stating: a category that
+ * only appears beyond this page will not be offered, and the list is
+ * deliberately fetched *unfiltered* — deriving it from the filtered listing
+ * would collapse the options to whichever category is already selected.
+ */
+export function useProductCategories() {
+  return useQuery({
+    queryKey: productKeys.categories(),
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const page = await api.get<Paginated<ProductListItem>>(
+        endpoints.products.list({ limit: 100 })
+      );
+      return [...new Set(page.data.map((item) => item.category))].sort((a, b) =>
+        a.localeCompare(b)
+      );
+    },
   });
 }
 
