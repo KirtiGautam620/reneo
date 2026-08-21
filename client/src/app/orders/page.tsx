@@ -3,9 +3,20 @@
 import Link from 'next/link';
 import { useOrders } from '@/hooks/use-orders';
 import { useSession } from '@/hooks/use-session';
-import { formatDateTime, formatMoney } from '@/lib/format';
 import { ApiError } from '@/lib/api-client';
+import { formatDateTime, formatMoney } from '@/lib/format';
+import type { Order, OrderStatus } from '@/types/api';
 import styles from './orders.module.css';
+
+const STATUS_CLASS: Record<OrderStatus, string> = {
+  CONFIRMED: styles.statusConfirmed,
+  CANCELLED: styles.statusCancelled,
+  PENDING: styles.statusPending,
+};
+
+/** Units bought, not line count — two of one product is two items. */
+const itemCount = (order: Order) =>
+  order.order_items.reduce((sum, item) => sum + item.quantity, 0);
 
 export default function OrdersPage() {
   const { user, isLoading: sessionLoading } = useSession();
@@ -14,7 +25,7 @@ export default function OrdersPage() {
   if (!sessionLoading && !user) {
     return (
       <main className={styles.page}>
-        <h1 className={styles.heading}>Orders</h1>
+        <h1 className={styles.heading}>Your orders</h1>
         <p className={styles.notice}>
           <Link href="/login" className={styles.noticeLink}>
             Log in
@@ -29,7 +40,8 @@ export default function OrdersPage() {
 
   return (
     <main className={styles.page}>
-      <h1 className={styles.heading}>Orders</h1>
+      <h1 className={styles.heading}>Your orders</h1>
+      <p className={styles.subheading}>Most recent first.</p>
 
       {isPending && <p className={styles.notice}>Loading orders…</p>}
 
@@ -41,31 +53,40 @@ export default function OrdersPage() {
 
       {!isPending && !isError && orders.length === 0 && (
         <p className={styles.notice}>
-          No orders yet.{' '}
+          You have not placed any orders yet.{' '}
           <Link href="/" className={styles.noticeLink}>
-            Browse the catalogue
-          </Link>
-          .
+            Browse the marketplace
+          </Link>{' '}
+          to get started.
         </p>
       )}
 
       {orders.length > 0 && (
-        <ul className={styles.items}>
-          {orders.map((order) => (
-            <li key={order.id}>
-              <Link href={`/orders/${order.id}`} className={styles.orderLink}>
-                <span className={styles.orderId}>
-                  {order.order_items.length} item
-                  {order.order_items.length === 1 ? '' : 's'} ·{' '}
-                  {formatDateTime(order.created_at)}
-                </span>
-                <span className={styles.itemMeta}>{order.status}</span>
-                <span className={styles.itemSubtotal}>
-                  {formatMoney(order.total_minor, order.currency)}
-                </span>
-              </Link>
-            </li>
-          ))}
+        <ul className={styles.list}>
+          {orders.map((order) => {
+            const count = itemCount(order);
+            return (
+              <li key={order.id}>
+                <Link href={`/orders/${order.id}`} className={styles.row}>
+                  <span className={styles.rowMain}>
+                    <span className={styles.rowDate}>
+                      {formatDateTime(order.created_at)}
+                    </span>
+                    <span className={styles.rowId}>{order.id}</span>
+                  </span>
+                  <span className={`${styles.status} ${STATUS_CLASS[order.status]}`}>
+                    {order.status}
+                  </span>
+                  <span className={styles.rowCount}>
+                    {count} item{count === 1 ? '' : 's'}
+                  </span>
+                  <span className={styles.rowTotal}>
+                    {formatMoney(order.total_minor, order.currency)}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </main>

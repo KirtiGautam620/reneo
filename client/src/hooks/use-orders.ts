@@ -9,13 +9,14 @@ export const orderKeys = {
   all: ['orders'] as const,
   lists: () => [...orderKeys.all, 'list'] as const,
   list: () => [...orderKeys.lists()] as const,
+  detail: (id: string) => [...orderKeys.all, 'detail', id] as const,
 };
 
 /**
  * GET /orders applies no filter of its own — RLS decides visibility, so a
  * customer sees their own orders and a seller sees orders containing one of
  * their line items. The endpoint is unpaginated and the server caps it at the
- * 50 most recent orders.
+ * 50 most recent.
  */
 export function useOrders() {
   return useQuery({
@@ -25,9 +26,11 @@ export function useOrders() {
 }
 
 /**
- * There is no GET /orders/{id} in the API, so a single order is picked out of
- * the list. Consequence: an order older than the 50 most recent cannot be
- * addressed by URL. Adding the endpoint would remove that limit.
+ * There is no GET /orders/{id} in the API, so a single order is selected from
+ * the list rather than fetched. Two consequences worth knowing:
+ *  - opening an order costs no extra request when the list is already cached;
+ *  - an order outside the 50 most recent cannot be addressed by URL at all.
+ * Adding the endpoint would remove the second limit.
  */
 export function useOrder(id: string | undefined) {
   const query = useOrders();
