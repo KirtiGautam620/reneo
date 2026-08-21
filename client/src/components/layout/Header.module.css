@@ -1,0 +1,135 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.brand {
+  margin-right: auto;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.link {
+  padding: 7px 11px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.link:hover {
+  background: var(--surface-muted);
+  color: var(--text-primary);
+}
+
+.user {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 6px 0 10px;
+  font-size: 14px;
+  font-weight: 550;
+}
+
+.logout {
+  padding: 7px 11px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.logout:hover:not(:disabled) {
+  background: var(--surface-muted);
+  color: var(--text-primary);
+}
+
+.logout:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.signup {
+  padding: 7px 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--text-primary);
+}
+
+.signup:hover {
+  background: var(--surface-muted);
+}
+
+.cart {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+  padding: 7px 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cart:hover {
+  background: var(--surface-muted);
+}
+
+.cartIcon {
+  display: block;
+  width: 17px;
+  height: 17px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Holds the auth controls' width while the session resolves, so the rest of the
+ * bar does not jump sideways once they appear.
+ */
+.authPlaceholder {
+  width: 132px;
+}
+
+@media (max-width: 560px) {
+  .header {
+    padding: 12px 14px;
+  }
+
+  .user,
+  .authPlaceholder {
+    display: none;
+  }
+}
