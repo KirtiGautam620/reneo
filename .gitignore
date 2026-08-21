@@ -3,4 +3,4 @@ dist
 .env
 .env.local
 *.log
-scripts/env.sh
+**/env.sh
