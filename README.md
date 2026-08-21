@@ -227,6 +227,19 @@ The two must be on different ports. The API defaults to `4000` and the
 frontend to `3000`; CORS on the API allows `localhost:3000` and `localhost:3001`
 out of the box, and is configurable via `CORS_ORIGINS`.
 
+### Deploying
+
+Two variables decide whether the halves can talk to each other, and both are
+build- or boot-time:
+
+- **Frontend host** (e.g. Vercel): `NEXT_PUBLIC_API_URL` must be the API's public
+  origin. It is inlined at build time, so changing it requires a redeploy, not
+  just a restart.
+- **API host** (e.g. Render): `CORS_ORIGINS` must include the frontend's origin,
+  or every browser request fails its preflight with *"No
+  'Access-Control-Allow-Origin' header is present"*. The API logs its allow-list
+  at boot and logs every refused origin, so this is one log line to diagnose.
+
 Sign up one **seller** and one **customer** account. The seller creates a store,
 adds a product with stock; the customer can then browse and buy it.
 
@@ -241,7 +254,7 @@ adds a product with stock; the customer can then browse and buy it.
 | `SUPABASE_SECRET_KEY` | **service role.** JWT verification, outbox worker, test fixtures. Bypasses RLS — server only |
 | `SUPABASE_JWKS_URL` | JWT verification |
 | `PORT` | API port, default 4000 |
-| `CORS_ORIGINS` | comma-separated allowed origins, defaults to the two localhost dev ports |
+| `CORS_ORIGINS` | comma-separated browser origins allowed to call the API. **Required in production** — unset it defaults to the localhost dev ports, and a deployed frontend is refused at the preflight. `*` matches within a hostname segment, so `https://reneo-*.vercel.app` covers Vercel preview deployments |
 
 **`client/.env.local`** — see [`client/.env.example`](client/.env.example).
 
