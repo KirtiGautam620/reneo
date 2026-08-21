@@ -1,0 +1,198 @@
+.page {
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+.heading {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.6px;
+}
+
+.items {
+  list-style: none;
+  margin-top: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+/* The line the server rejected — highlighted so the conflict is unmissable. */
+.itemBlocked {
+  background: var(--danger-surface);
+  border-left: 3px solid var(--danger);
+}
+
+.itemInfo {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.itemName {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.itemName:hover {
+  text-decoration: underline;
+}
+
+.itemMeta {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.itemWarning {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.quantity {
+  width: 78px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-variant-numeric: tabular-nums;
+}
+
+.quantityInvalid {
+  border-color: var(--danger);
+}
+
+.subtotal {
+  min-width: 96px;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.remove {
+  padding: 7px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.remove:hover {
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.total {
+  font-size: 20px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.totalNote {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.checkout {
+  padding: 12px 26px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-size: 15px;
+  font-weight: 620;
+  cursor: pointer;
+}
+
+.checkout:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.problem {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid var(--danger-border);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--danger-surface);
+}
+
+.problemTitle {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--danger);
+}
+
+.problemDetail {
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.problemActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.problemAction {
+  padding: 8px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notice {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.noticeLink {
+  font-weight: 600;
+  text-decoration: underline;
+  color: var(--text-primary);
+}
