@@ -12,11 +12,16 @@ Two halves in one repository:
 | [`client/`](client/) | Next.js App Router + React Query + CSS Modules | the storefront and seller console |
 | [`openapi.yaml`](openapi.yaml) | OpenAPI 3.1 | the contract between them, and the source of truth |
 
-> **Status:** working end to end locally — signup, browse, cart, checkout,
-> order history, seller onboarding, catalogue management and incoming orders
-> have all been exercised against the real API in a browser. It is not
-> production-ready. [Not implemented](#not-implemented) is an honest list of
-> what is missing.
+> **Status:** working end to end — signup, browse, cart, checkout, order
+> history, seller onboarding, catalogue management and incoming orders have all
+> been exercised against the real API in a browser, locally and on the deployed
+> stack. It is not production-ready. [Not implemented](#not-implemented) is an
+> honest list of what is missing.
+
+**Deployed:** frontend on Vercel — <https://reneo-delta.vercel.app>; API on
+Render — <https://reneo-c4wy.onrender.com> (`/health` returns `{"status":"ok"}`).
+The frontend does not call that API origin from the browser; it proxies it under
+its own — see [How the two halves talk](#how-the-two-halves-talk).
 
 ---
 
@@ -30,6 +35,8 @@ Browser
   │
   │  ② everything else — products, orders, stores, inventory
   │     Authorization: Bearer <user JWT>
+  │     sent to /api/… on the frontend's own origin, and forwarded
+  │     server-side by a Next rewrite (see How the two halves talk)
   ▼
 Express  (server/)
   ├─ authenticate      → verifies the JWT, loads the profile, builds a
@@ -211,7 +218,7 @@ production it would be required.
 cd server
 npm install
 cp .env.example .env      # fill in the Supabase URL and keys
-npm run dev               # listens on PORT, default 4000
+npm run dev               # listens on PORT from .env — 4000 in .env.example
 ```
 
 ### 3. Frontend — `client/`
@@ -219,28 +226,61 @@ npm run dev               # listens on PORT, default 4000
 ```bash
 cd client
 npm install
-cp .env.example .env.local   # fill in the Supabase URL and anon key
+cp .env.example .env.local   # fill in the Supabase URL and anon key only
 npm run dev                  # http://localhost:3000
 ```
 
-The two must be on different ports. The API defaults to `4000` and the
-frontend to `3000`; CORS on the API allows `localhost:3000` and `localhost:3001`
-out of the box, and is configurable via `CORS_ORIGINS`.
+The two run on different ports — `3000` and `4000` — but the browser only ever
+sees `3000`. **`NEXT_PUBLIC_API_URL` is deliberately left unset**: the client
+calls `/api/...` on its own origin and Next forwards it to the API. Nothing in
+`.env.local` has to name the API for local development to work.
+
+### How the two halves talk
+
+The frontend does **not** call the API's origin from the browser. It calls
+`/api/...` on its own origin, and a Next rewrite in
+[`next.config.ts`](client/next.config.ts) forwards that server-side to the
+Express API:
+
+```
+browser ──► https://reneo-delta.vercel.app/api/products   (same-origin: no preflight)
+                        │  Next rewrite, server-side
+                        ▼
+            https://reneo-c4wy.onrender.com/products
+```
+
+`BASE_URL` in [`api-client.ts`](client/src/lib/api-client.ts) is therefore
+`/api` by default, and `Authorization` and `Idempotency-Key` pass through the
+rewrite unchanged — which is what order placement depends on.
+
+This removes a failure class rather than configuring around it: a cross-origin
+call must be authorised by the API's allow-list, and a forgotten entry presents
+itself as a broken app whose only symptom is *"No 'Access-Control-Allow-Origin'
+header is present"* in the browser console. Same-origin requests are never
+preflighted, so that cannot happen. The cost is one extra hop through Vercel,
+and a rewrite target that is build-time configuration rather than a runtime
+setting.
+
+**CORS still exists on the API** and still matters, because the proxy is a
+default, not a lock — set `NEXT_PUBLIC_API_URL` to an absolute origin and the
+browser talks to the API directly again. The allow-list
+([`server/src/index.ts`](server/src/index.ts)) compiles in local development and
+this project's own deployed frontend as defaults, so that path also works
+unconfigured; `CORS_ORIGINS` is *added to* those defaults rather than replacing
+them, and `*` matches within one hostname segment so Vercel preview URLs
+(`https://reneo-*.vercel.app`) are covered. The API logs its allow-list at boot
+and logs every refused origin, so a mismatch is one log line rather than a
+console hunt.
 
 ### Deploying
 
-Two variables decide whether the halves can talk to each other, and both are
-build- or boot-time:
-
-- **Frontend host** (e.g. Vercel): `NEXT_PUBLIC_API_URL` must be the API's public
-  origin. It is inlined at build time, so changing it requires a redeploy, not
-  just a restart.
-- **API host** (e.g. Render): the frontend's origin must be in the CORS
-  allow-list, or every browser request fails its preflight with *"No
-  'Access-Control-Allow-Origin' header is present"*. Known origins are compiled
-  in as defaults so this works without configuration; `CORS_ORIGINS` adds more.
-  The API logs its allow-list at boot and logs every refused origin, so a
-  mismatch is one log line rather than a console hunt.
+- **Frontend host** (Vercel): set the two `NEXT_PUBLIC_SUPABASE_*` variables.
+  Set `API_PROXY_TARGET` only if the API is not at the origin compiled into
+  `next.config.ts`. Both are read at build time, so changing either needs a
+  redeploy, not a restart.
+- **API host** (Render): set the four `SUPABASE_*` variables. Leave `PORT`
+  unset — the host assigns it. `CORS_ORIGINS` is optional and only matters for
+  browsers that bypass the proxy.
 
 Sign up one **seller** and one **customer** account. The seller creates a store,
 adds a product with stock; the customer can then browse and buy it.
@@ -255,19 +295,20 @@ adds a product with stock; the customer can then browse and buy it.
 | `SUPABASE_PUBLISHABLE_KEY` | anon key, used for per-request clients that carry the caller's JWT |
 | `SUPABASE_SECRET_KEY` | **service role.** JWT verification, outbox worker, test fixtures. Bypasses RLS — server only |
 | `SUPABASE_JWKS_URL` | JWT verification |
-| `PORT` | API port, default 4000 |
+| `PORT` | API port. `.env.example` sets `4000`; the code falls back to `3000` if unset. Hosts that assign a port (Render, Fly, Heroku) set this themselves — leave it unset there |
 | `CORS_ORIGINS` | *optional.* Extra browser origins allowed to call the API, **added to** the built-in defaults rather than replacing them. `*` matches within a hostname segment. The defaults already cover local development and the deployed frontend, and the allow-list is logged at boot |
 
 **`client/.env.local`** — see [`client/.env.example`](client/.env.example).
 
 | Variable | Purpose |
 |---|---|
-| `NEXT_PUBLIC_API_URL` | base URL of the Express API. Defaults to `http://localhost:4000` for a fresh clone; **a production build must be given the production origin**, since `NEXT_PUBLIC_` values are inlined at build time |
 | `NEXT_PUBLIC_SUPABASE_URL` | project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon key — public by design |
+| `API_PROXY_TARGET` | *optional, server-side only.* Where the `/api` rewrite forwards to. Defaults to `http://localhost:4000` in development and the deployed API in production, so it normally needs no setting. Not `NEXT_PUBLIC_`, so it never reaches the browser |
+| `NEXT_PUBLIC_API_URL` | *optional.* Set it to an absolute origin to **bypass the proxy** and have the browser call the API directly — that API must then allow this origin in `CORS_ORIGINS`. Unset by default, which is the recommended configuration |
 
-Every client variable is `NEXT_PUBLIC_`, which means **every one of them is
-compiled into the JavaScript bundle and readable by anyone**. That is acceptable
+Every `NEXT_PUBLIC_` variable is **compiled into the JavaScript bundle and
+readable by anyone**. That is acceptable
 only because none of them grants anything: the anon key identifies the project,
 not a user, and RLS decides what the signed-in user may touch. The service-role
 key is absent from `client/` entirely — verified against both the source and the
@@ -285,7 +326,11 @@ client/src/
     cart/               cart and checkout
     orders/             customer order history
     seller/             store onboarding, catalogue, incoming orders
-  components/           Header, Skeleton
+  components/
+    layout/             Header
+    panel/              SignedOutPanel, EmptyState, icons
+    order/              OrderRef (short, copyable order reference)
+    skeleton/           loading placeholders
   hooks/                use-products, use-orders, use-cart, use-checkout, use-store, use-session
   lib/                  api-client, endpoints, format, checkout-errors, seller-errors, motion
   types/api.ts          types mirroring openapi.yaml
@@ -539,10 +584,12 @@ frontend. Field names and endpoint paths in `client/src/types/api.ts` and
 ## Tests
 
 ```bash
-cd server && npm test
+cd server && npx vitest run
 ```
 
-`server/tests/` contains an API suite and a concurrency suite (Vitest +
+There is no `test` script in `server/package.json`; Vitest is a devDependency
+and [`vitest.config.ts`](server/vitest.config.ts) is checked in, so it is run
+directly. `server/tests/` contains an API suite and a concurrency suite (Vitest +
 Supertest), including the last-unit race fired with `Promise.all` so the
 requests genuinely race — sequential `await`s would not test concurrency at all.
 
@@ -658,7 +705,12 @@ Stated plainly, rather than left to be discovered.
 - No error monitoring or analytics.
 
 **Operations**
-- No CI, no deployment configuration, no container image. Nothing is deployed.
+- Deployed to Vercel and Render from the default branch, but there is no CI:
+  nothing runs the test suite, typechecks or lints before a deploy, and there is
+  no container image or infrastructure definition in the repository. The only
+  deployment configuration that exists is `next.config.ts`'s proxy target and
+  the API's compiled-in CORS defaults — both of which hardcode this project's
+  own hostnames.
 - No rate limiting, request logging or observability beyond `console.error`.
 - No admin role or moderation tooling.
 - Email confirmation is disabled in the Supabase project.
