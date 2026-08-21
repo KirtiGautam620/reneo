@@ -4,12 +4,16 @@ import type { ApiErrorCode, ErrorDetails, ProductErrorDetails } from '@/types/ap
 /**
  * Base URL of the Express API.
  *
- * Set NEXT_PUBLIC_API_URL in the deployment environment; it is inlined at build
- * time, so a production build must be given the production API origin. The
- * localhost fallback exists so a fresh clone runs without configuration — it is
- * never what a deployed build should be using.
+ * Defaults to `/api`, which this app proxies to the real API server-side (see
+ * the rewrite in next.config.ts). Because that is same-origin, requests carry
+ * no preflight and CORS is not involved.
+ *
+ * Set NEXT_PUBLIC_API_URL to an absolute origin to bypass the proxy and call
+ * the API directly — in which case that API must allow this origin in its CORS
+ * configuration. The value is inlined at build time, so changing it requires a
+ * rebuild rather than a restart.
  */
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api';
 
 export class ApiError extends Error {
   constructor(
