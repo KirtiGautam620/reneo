@@ -11,7 +11,8 @@ import { formatMoney } from '@/lib/format';
 import { ApiError } from '@/lib/api-client';
 import { Skeleton } from '@/components/skeleton/Skeleton';
 import { GhostRows, SignedOutPanel } from '@/components/panel/SignedOutPanel';
-import { CartIcon } from '@/components/panel/icons';
+import { CartIcon, StorefrontIcon } from '@/components/panel/icons';
+import { EmptyState } from '@/components/panel/EmptyState';
 import type { ProductWithInventory } from '@/types/api';
 import styles from './page.module.css';
 
@@ -155,12 +156,12 @@ export default function CartPage() {
     return (
       <main className={styles.page}>
         <h1 className={styles.heading}>Your cart</h1>
-        <div className={styles.notice}>
-          <p>Your cart is empty. Products you add are kept on this device.</p>
-          <Link href="/" className={styles.emptyAction}>
-            Browse the marketplace
-          </Link>
-        </div>
+        <EmptyState
+          icon={<StorefrontIcon />}
+          title="Your cart is empty"
+          body="Anything you add is kept on this device, so you can come back to it later."
+          action={{ label: 'Browse the marketplace', href: '/' }}
+        />
       </main>
     );
   }

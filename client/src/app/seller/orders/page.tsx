@@ -6,6 +6,8 @@ import { useSession } from '@/hooks/use-session';
 import { describeSellerError } from '@/lib/seller-errors';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import { Skeleton, SkeletonRegion } from '@/components/skeleton/Skeleton';
+import { EmptyState } from '@/components/panel/EmptyState';
+import { ReceiptIcon } from '@/components/panel/icons';
 import type { Order, OrderItem, OrderStatus } from '@/types/api';
 import styles from './orders.module.css';
 
@@ -158,15 +160,12 @@ export default function SellerOrdersPage() {
       )}
 
       {!isPending && !isError && visible.length === 0 && (
-        <div className={styles.notice}>
-          <p>
-            No orders yet. They appear here as soon as a customer buys one of
-            your products.
-          </p>
-          <Link href="/seller/products" className={styles.emptyAction}>
-            Review your products
-          </Link>
-        </div>
+        <EmptyState
+          icon={<ReceiptIcon />}
+          title="No orders yet"
+          body="As soon as a customer buys one of your products, the order appears here with your line items."
+          action={{ label: 'Review your products', href: '/seller/products' }}
+        />
       )}
 
       {visible.map(({ order, items }) => (

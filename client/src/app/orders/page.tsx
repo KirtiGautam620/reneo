@@ -5,7 +5,8 @@ import { useOrders } from '@/hooks/use-orders';
 import { useSession } from '@/hooks/use-session';
 import { Skeleton, SkeletonRegion } from '@/components/skeleton/Skeleton';
 import { GhostRows, SignedOutPanel } from '@/components/panel/SignedOutPanel';
-import { ReceiptIcon } from '@/components/panel/icons';
+import { ReceiptIcon, StorefrontIcon } from '@/components/panel/icons';
+import { EmptyState } from '@/components/panel/EmptyState';
 import { ApiError } from '@/lib/api-client';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import type { Order, OrderStatus } from '@/types/api';
@@ -104,12 +105,12 @@ export default function OrdersPage() {
       )}
 
       {!isPending && !isError && orders.length === 0 && (
-        <div className={styles.notice}>
-          <p>You have not placed any orders yet.</p>
-          <Link href="/" className={styles.emptyAction}>
-            Browse the marketplace
-          </Link>
-        </div>
+        <EmptyState
+          icon={<StorefrontIcon />}
+          title="No orders yet"
+          body="Orders you place appear here, with their line items and what you paid."
+          action={{ label: 'Browse the marketplace', href: '/' }}
+        />
       )}
 
       {orders.length > 0 && (

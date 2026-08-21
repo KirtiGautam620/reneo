@@ -5,6 +5,8 @@ import { useSellerProducts } from '@/hooks/use-products';
 import { describeSellerError } from '@/lib/seller-errors';
 import { formatMoney } from '@/lib/format';
 import { Skeleton, SkeletonRegion } from '@/components/skeleton/Skeleton';
+import { EmptyState } from '@/components/panel/EmptyState';
+import { BoxIcon } from '@/components/panel/icons';
 import styles from '../seller.module.css';
 
 export default function SellerProductsPage() {
@@ -59,13 +61,12 @@ export default function SellerProductsPage() {
       )}
 
       {!products.isPending && !products.isError && rows.length === 0 && (
-        <p className={styles.notice}>
-          No products yet.{' '}
-          <Link href="/seller/products/new" className={styles.noticeLink}>
-            Add your first one
-          </Link>
-          .
-        </p>
+        <EmptyState
+          icon={<BoxIcon />}
+          title="No products yet"
+          body="Add a product with a price and some stock, and it appears in the marketplace straight away."
+          action={{ label: 'Add your first product', href: '/seller/products/new' }}
+        />
       )}
 
       {rows.length > 0 && (

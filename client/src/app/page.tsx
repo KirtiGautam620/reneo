@@ -6,7 +6,8 @@ import { useProductCategories, useProducts } from '@/hooks/use-products';
 import { useSession } from '@/hooks/use-session';
 import { Skeleton, SkeletonRegion } from '@/components/skeleton/Skeleton';
 import { GhostCards, SignedOutPanel } from '@/components/panel/SignedOutPanel';
-import { StorefrontIcon } from '@/components/panel/icons';
+import { StorefrontIcon, SearchIcon } from '@/components/panel/icons';
+import { EmptyState } from '@/components/panel/EmptyState';
 import { formatMoney } from '@/lib/format';
 import { ApiError } from '@/lib/api-client';
 import type { ProductSort } from '@/types/api';
@@ -37,7 +38,7 @@ function CardSkeleton() {
 }
 
 export default function MarketplacePage() {
-  const { user, isLoading: sessionLoading } = useSession();
+  const { user, role, isLoading: sessionLoading } = useSession();
 
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<ProductSort>('newest');
@@ -61,6 +62,7 @@ export default function MarketplacePage() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    refetch,
   } = useProducts({
     q: q.length > 0 ? q : undefined,
     category: category === ALL_CATEGORIES ? undefined : category,
@@ -70,6 +72,14 @@ export default function MarketplacePage() {
 
   const hasFilters =
     q.length > 0 || category !== ALL_CATEGORIES || inStockOnly;
+
+  // Naming the filters that excluded everything is more useful than saying
+  // "no results" — it points at what to relax.
+  const activeFilters = [
+    q.length > 0 ? `“${q}”` : null,
+    category !== ALL_CATEGORIES ? category : null,
+    inStockOnly ? 'in stock' : null,
+  ].filter((value): value is string => value !== null);
 
   function clearFilters() {
     setSearch('');
@@ -188,30 +198,39 @@ export default function MarketplacePage() {
       )}
 
       {!isPending && !isError && products.length === 0 && (
-        <div className={styles.notice}>
-          {hasFilters ? (
-            <>
-              <p>No products match these filters.</p>
-              <button
-                type="button"
-                className={styles.emptyAction}
-                onClick={clearFilters}
-              >
-                Clear filters
-              </button>
-            </>
-          ) : (
-            <>
-              <p>
-                Nothing is listed yet. The marketplace fills up as sellers add
-                products.
-              </p>
-              <Link href="/signup" className={styles.emptyAction}>
-                Sell on Reneo
-              </Link>
-            </>
-          )}
-        </div>
+        hasFilters ? (
+          <EmptyState
+            icon={<SearchIcon />}
+            title="No products match"
+            body={
+              <>
+                Nothing is listed for {activeFilters.join(' · ')}. Try a broader
+                search, or clear the filters to see everything.
+              </>
+            }
+            action={{ label: 'Clear filters', onClick: clearFilters }}
+          />
+        ) : (
+          <EmptyState
+            icon={<StorefrontIcon />}
+            title="Nothing listed yet"
+            body={
+              role === 'SELLER'
+                ? 'The marketplace fills up as sellers add products — yours could be the first.'
+                : 'The marketplace fills up as sellers add products. There is nothing to show just yet.'
+            }
+            /*
+             * A role is fixed at signup, so a customer has no route to selling
+             * and pointing them at one would be a dead end. They get a way to
+             * look again instead.
+             */
+            action={
+              role === 'SELLER'
+                ? { label: 'List your first product', href: '/seller/products/new' }
+                : { label: 'Check again', onClick: () => void refetch() }
+            }
+          />
+        )
       )}
 
       {products.length > 0 && (
