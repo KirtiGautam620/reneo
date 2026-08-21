@@ -245,7 +245,7 @@
 .section {
   margin-top: var(--space-7);
   padding-top: var(--space-6);
-  border-top: var(--space-4) solid var(--border);
+  border-top: var(--stroke-thin) solid var(--border);
 }
 
 .sectionTitle {

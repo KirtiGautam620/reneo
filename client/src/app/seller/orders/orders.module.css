@@ -55,10 +55,6 @@
 
 .orderId {
   flex: 1 1 auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: var(--text-2xs);
-  color: var(--text-secondary);
-  word-break: break-all;
 }
 
 .status {
@@ -131,7 +127,7 @@
   justify-content: space-between;
   gap: var(--space-3);
   padding: var(--space-4) var(--space-4);
-  border-top: var(--space-4) solid var(--border-strong);
+  border-top: var(--stroke-thin) solid var(--border-strong);
   background: var(--surface-muted);
 }
 

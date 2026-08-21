@@ -5,6 +5,7 @@ import { useOrders } from '@/hooks/use-orders';
 import { useSession } from '@/hooks/use-session';
 import { describeSellerError } from '@/lib/seller-errors';
 import { formatDateTime, formatMoney } from '@/lib/format';
+import { OrderRef } from '@/components/order/OrderRef';
 import { Skeleton, SkeletonRegion } from '@/components/skeleton/Skeleton';
 import { EmptyState } from '@/components/panel/EmptyState';
 import { ReceiptIcon } from '@/components/panel/icons';
@@ -48,7 +49,9 @@ function OrderCard({ order, items }: { order: Order; items: OrderItem[] }) {
         <span className={`${styles.status} ${STATUS_CLASS[order.status]}`}>
           {order.status}
         </span>
-        <span className={styles.orderId}>{order.id}</span>
+        <span className={styles.orderId}>
+          <OrderRef id={order.id} />
+        </span>
       </header>
 
       <ul className={styles.items}>

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useOrder } from '@/hooks/use-orders';
 import { ApiError } from '@/lib/api-client';
 import { formatDateTime, formatMoney } from '@/lib/format';
+import { OrderRef } from '@/components/order/OrderRef';
 import type { OrderItem, OrderStatus } from '@/types/api';
 import styles from '../orders.module.css';
 
@@ -94,8 +95,10 @@ export default function OrderDetailPage({
           {order.status}
         </span>
         <span className={styles.subheading}>{formatDateTime(order.created_at)}</span>
+        {/* Support needs the id, so it stays — as a short reference that copies
+            in full, rather than 36 characters of UUID across the page. */}
+        <OrderRef id={order.id} />
       </div>
-      <p className={styles.metaId}>{order.id}</p>
 
       {multiSeller && (
         <p className={`${styles.subheading} ${styles.stackMd}`}>

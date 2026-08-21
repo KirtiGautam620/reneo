@@ -68,6 +68,18 @@ export function formatMoney(minor: number, currency = 'XOF'): string {
   }
 }
 
+/**
+ * Short, human-quotable form of an order id.
+ *
+ * A UUID is 36 characters of noise to read aloud or type into a support chat,
+ * but it is still the only handle on an order — so it is shortened for display
+ * and the full value is kept for copying, never discarded. The first block of a
+ * v4 UUID is random, so it is a sound choice for a reference.
+ */
+export function orderReference(id: string): string {
+  return id.split('-')[0]?.toUpperCase() ?? id.toUpperCase();
+}
+
 export function formatDateTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;

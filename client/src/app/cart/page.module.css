@@ -111,7 +111,7 @@
   gap: var(--space-4);
   margin-top: var(--space-6);
   padding-top: var(--space-5);
-  border-top: var(--space-4) solid var(--border);
+  border-top: var(--stroke-thin) solid var(--border);
 }
 
 .total {

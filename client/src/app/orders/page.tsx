@@ -9,6 +9,7 @@ import { ReceiptIcon, StorefrontIcon } from '@/components/panel/icons';
 import { EmptyState } from '@/components/panel/EmptyState';
 import { ApiError } from '@/lib/api-client';
 import { formatDateTime, formatMoney } from '@/lib/format';
+import { OrderRefStatic } from '@/components/order/OrderRef';
 import type { Order, OrderStatus } from '@/types/api';
 import styles from './orders.module.css';
 
@@ -124,7 +125,10 @@ export default function OrdersPage() {
                     <span className={styles.rowDate}>
                       {formatDateTime(order.created_at)}
                     </span>
-                    <span className={styles.rowId}>{order.id}</span>
+                    <span className={styles.rowId}>
+                      {/* The row is a link, so this must not be a button. */}
+                      <OrderRefStatic id={order.id} />
+                    </span>
                   </span>
                   <span className={`${styles.status} ${STATUS_CLASS[order.status]}`}>
                     {order.status}
