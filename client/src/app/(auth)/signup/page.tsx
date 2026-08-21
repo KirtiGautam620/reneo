@@ -85,7 +85,7 @@ export default function SignupPage() {
           />
         </label>
 
-        <fieldset>
+        <fieldset className={styles.roleGroup}>
           <legend className={styles.rolesLegend}>I want to</legend>
           <div className={styles.roles}>
             {ROLES.map((option) => (
