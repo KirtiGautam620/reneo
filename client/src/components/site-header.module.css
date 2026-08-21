@@ -1,0 +1,59 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.brand {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+  margin-right: auto;
+}
+
+.link {
+  font-size: 14px;
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  border-radius: var(--radius);
+}
+
+.link:hover {
+  color: var(--text-primary);
+  background: var(--surface-muted);
+}
+
+.cart {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 550;
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.cart:hover {
+  background: var(--surface-muted);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}

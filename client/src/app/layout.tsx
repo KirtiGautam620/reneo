@@ -1,5 +1,12 @@
+import type { Metadata } from 'next';
 import { Providers } from './providers';
+import { SiteHeader } from '@/components/site-header';
 import './globals.css';
+
+export const metadata: Metadata = {
+  title: 'Reneo',
+  description: 'Multi-seller commerce',
+};
 
 export default function RootLayout({
   children,
@@ -9,7 +16,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <SiteHeader />
+          {children}
+        </Providers>
       </body>
     </html>
   );
