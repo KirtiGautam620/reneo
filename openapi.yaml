@@ -146,6 +146,16 @@ paths:
           in: query
           description: When `true`, only products with quantity greater than zero
           schema: { type: string, enum: ['true', 'false'] }
+        - name: mine
+          in: query
+          description: |
+            When `true`, returns the caller's own catalogue instead of the
+            marketplace: scoped to the caller's store and **including ARCHIVED
+            products**, which a seller must still be able to find after
+            archiving. A caller with no store gets an empty page rather than an
+            error. Any other caller sees the ACTIVE marketplace, so `status` is
+            always `ACTIVE` unless `mine=true`.
+          schema: { type: string, enum: ['true', 'false'] }
         - name: sort
           in: query
           schema: { type: string, enum: [newest, price_asc, price_desc], default: newest }
@@ -318,6 +328,75 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  /products/{id}/inventory:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    patch:
+      tags: [Products]
+      summary: Adjust own product's stock
+      description: |
+        Restocking. `quantity` is refused by `PATCH /products/{id}` because an
+        absolute write races a concurrent order — the decrement could be read,
+        overwritten and lost. This endpoint takes a **relative** `delta`, applied
+        as `quantity = quantity + delta` inside a single locking statement, so it
+        composes with an in-flight order rather than clobbering it.
+
+        The non-negative guard lives in the same `UPDATE`, so an order that takes
+        stock between check and write cannot drive the result below zero; the
+        adjustment is rejected with 409 instead.
+
+        Returns **403 for both "does not exist" and "not yours"**, matching
+        `PATCH /products/{id}`, so the endpoint cannot be used to enumerate ids.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [delta]
+              properties:
+                delta:
+                  type: integer
+                  description: |
+                    Signed change in units. Positive restocks, negative removes.
+                    Zero is rejected with 400.
+            example: { delta: 10 }
+      responses:
+        '200':
+          description: Stock adjusted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  product_id: { type: string, format: uuid }
+                  quantity:   { type: integer, description: Resulting stock level }
+              example: { product_id: 62648926-1e11-44d2-aea3-0ae059a31464, quantity: 15 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403':
+          description: Caller is not a SELLER, has no store, or does not own the product
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: |
+            The adjustment would leave stock negative. `details.product_id`
+            names the product.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error:
+                  code: OUT_OF_STOCK
+                  message: 'Insufficient stock: 62648926-1e11-44d2-aea3-0ae059a31464'
+                  details: { product_id: 62648926-1e11-44d2-aea3-0ae059a31464 }
+
   /orders:
     post:
       tags: [Orders]
@@ -342,6 +421,11 @@ paths:
         same key and the same payload returns the original order with
         `replayed: true` and HTTP 200. The same key with a different payload
         returns 409.
+
+        The payload is matched by hashing the `items` array as sent, so a retry
+        must resend a byte-identical body — reordering the items changes the
+        hash and is rejected as a reuse. The replay body contains `order_id` and
+        `replayed` only; `total_minor` is present on the 201 response.
       parameters:
         - name: Idempotency-Key
           in: header
@@ -405,20 +489,34 @@ paths:
               example:
                 error: { code: NOT_A_CUSTOMER, message: Only customers can place orders, details: null }
         '404':
-          description: A product in the order does not exist
+          description: |
+            A product in the order does not exist. `details.product_id` names the
+            offending line item.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error:
+                  code: NOT_FOUND
+                  message: 'Product not found: 62648926-1e11-44d2-aea3-0ae059a31464'
+                  details: { product_id: 62648926-1e11-44d2-aea3-0ae059a31464 }
         '409':
           description: |
             Insufficient stock (`OUT_OF_STOCK`), an archived or unavailable
             product (`PRODUCT_UNAVAILABLE`), or an idempotency key reused with a
             different payload (`IDEMPOTENCY_KEY_REUSED`).
+
+            For `OUT_OF_STOCK` and `PRODUCT_UNAVAILABLE`, `details.product_id`
+            identifies which line item failed, so a client can name it without
+            parsing `message`. `IDEMPOTENCY_KEY_REUSED` carries `details: null`.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example:
-                error: { code: OUT_OF_STOCK, message: 'Insufficient stock: 62648926-1e11-44d2-aea3-0ae059a31464', details: null }
+                error:
+                  code: OUT_OF_STOCK
+                  message: 'Insufficient stock: 62648926-1e11-44d2-aea3-0ae059a31464'
+                  details: { product_id: 62648926-1e11-44d2-aea3-0ae059a31464 }
 
     get:
       tags: [Orders]
@@ -502,7 +600,10 @@ components:
             message: { type: string }
             details:
               type: [array, object, 'null']
-              description: Field-level validation issues, or null
+              description: |
+                Field-level validation issues, a machine-readable context object,
+                or null. Order errors that concern one line item carry
+                `{ product_id }`.
 
     Store:
       type: object
@@ -545,6 +646,7 @@ components:
         category:    { type: string }
         price_minor: { type: integer }
         currency:    { type: string }
+        status:      { type: string, enum: [ACTIVE, ARCHIVED] }
         created_at:  { type: string, format: date-time }
         inventory:
           type: object
@@ -553,10 +655,15 @@ components:
 
     OrderResult:
       type: object
+      required: [order_id, replayed]
       properties:
-        order_id:    { type: string, format: uuid }
-        total_minor: { type: integer, description: Computed server-side inside the transaction }
-        replayed:    { type: boolean, description: True when returned from an idempotency key }
+        order_id: { type: string, format: uuid }
+        total_minor:
+          type: integer
+          description: |
+            Computed server-side inside the transaction. Present on 201; omitted
+            from a 200 replay.
+        replayed: { type: boolean, description: True when returned from an idempotency key }
 
     Order:
       type: object
