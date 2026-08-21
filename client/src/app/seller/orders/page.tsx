@@ -2,13 +2,110 @@
 
 import Link from 'next/link';
 import { useOrders } from '@/hooks/use-orders';
+import { useSession } from '@/hooks/use-session';
 import { describeSellerError } from '@/lib/seller-errors';
 import { formatDateTime, formatMoney } from '@/lib/format';
-import styles from '../seller.module.css';
+import type { Order, OrderItem, OrderStatus } from '@/types/api';
+import styles from './orders.module.css';
+
+const STATUS_CLASS: Record<OrderStatus, string> = {
+  CONFIRMED: styles.statusConfirmed,
+  CANCELLED: styles.statusCancelled,
+  PENDING: styles.statusPending,
+};
+
+/**
+ * Scoping — verified against the running API with a two-seller order:
+ *
+ *   FILTERING OF LINE ITEMS IS DONE SERVER-SIDE, BY ROW LEVEL SECURITY.
+ *
+ * `GET /orders` applies no filter of its own. The `orders_select_as_seller`
+ * policy returns orders containing at least one of the caller's line items, and
+ * `order_items_select_as_seller` (`seller_id = auth.uid()`) trims the embedded
+ * items to the caller's own. A seller literally never receives another seller's
+ * line items over the wire.
+ *
+ * What RLS does *not* do is redact `orders.total_minor`. It is a column on a row
+ * the seller may legitimately read, so it arrives intact — and on a basket
+ * spanning two sellers it is the combined figure (110 000 when this seller sold
+ * only 50 000 of it). Rendering it would disclose another seller's revenue, so
+ * this page never shows it. The subtotal below is summed from the line items
+ * this seller actually owns.
+ */
+function sellerSubtotal(items: OrderItem[]): number {
+  // subtotal_minor is a generated column: unit_price_minor × quantity.
+  return items.reduce((sum, item) => sum + item.subtotal_minor, 0);
+}
+
+function OrderCard({ order, items }: { order: Order; items: OrderItem[] }) {
+  return (
+    <section className={styles.order}>
+      <header className={styles.orderHead}>
+        <span className={styles.orderDate}>{formatDateTime(order.created_at)}</span>
+        <span className={`${styles.status} ${STATUS_CLASS[order.status]}`}>
+          {order.status}
+        </span>
+        <span className={styles.orderId}>{order.id}</span>
+      </header>
+
+      <ul className={styles.items}>
+        {items.map((item) => (
+          <li key={item.id} className={styles.item}>
+            {/*
+              product_name and unit_price_minor are snapshots taken at purchase
+              time. They are rendered exactly as stored — never re-read from the
+              current product — so repricing or renaming an item today cannot
+              rewrite what a buyer was charged months ago.
+            */}
+            <span className={styles.itemName}>{item.product_name}</span>
+            <span className={styles.itemUnit}>
+              {item.quantity} × {formatMoney(item.unit_price_minor, order.currency)}
+            </span>
+            <span className={styles.itemSubtotal}>
+              {formatMoney(item.subtotal_minor, order.currency)}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <div className={styles.subtotal}>
+        <span className={styles.subtotalLabel}>
+          Your subtotal
+          <span className={styles.subtotalHint}>
+            Your line items only. An order may include other sellers.
+          </span>
+        </span>
+        <span className={styles.subtotalValue}>
+          {formatMoney(sellerSubtotal(items), order.currency)}
+        </span>
+      </div>
+    </section>
+  );
+}
 
 export default function SellerOrdersPage() {
+  const { user } = useSession();
   const { data, isPending, isError, error } = useOrders();
+
   const orders = data?.data ?? [];
+  const sellerId = user?.id ?? null;
+
+  const visible = orders
+    .map((order) => ({
+      order,
+      /*
+       * RLS has already restricted these to this seller. Re-checking seller_id
+       * is defence in depth, not the mechanism: showing another seller's line
+       * would disclose their revenue, so it is worth the extra comparison. When
+       * the session has not resolved yet, the server's own scoping stands.
+       */
+      items: sellerId
+        ? order.order_items.filter((item) => item.seller_id === sellerId)
+        : order.order_items,
+    }))
+    // An order with no items of ours should not be reachable, but an empty card
+    // would be meaningless if it were.
+    .filter(({ items }) => items.length > 0);
 
   return (
     <main className={styles.page}>
@@ -16,11 +113,11 @@ export default function SellerOrdersPage() {
         ← Your store
       </Link>
 
-      <h1 className={styles.heading}>Orders</h1>
+      <h1 className={styles.heading}>Incoming orders</h1>
       <p className={styles.subheading}>
-        Orders containing at least one of your products. RLS limits the line
-        items to yours, so another seller&apos;s items in the same order are not
-        shown.
+        Orders containing at least one of your products, showing your line items
+        and what they earned. An order can span several sellers, so the buyer&apos;s
+        overall order total is not shown here.
       </p>
 
       {isPending && <p className={styles.notice}>Loading orders…</p>}
@@ -31,63 +128,16 @@ export default function SellerOrdersPage() {
         </p>
       )}
 
-      {!isPending && !isError && orders.length === 0 && (
-        <p className={styles.notice}>No orders yet.</p>
+      {!isPending && !isError && visible.length === 0 && (
+        <p className={styles.notice}>
+          No orders yet. They appear here as soon as a customer buys one of your
+          products.
+        </p>
       )}
 
-      {orders.map((order) => {
-        // An order may span several sellers, so order.total_minor is the whole
-        // basket. Only the visible line items are this seller's.
-        const yourTotal = order.order_items.reduce(
-          (sum, item) => sum + item.subtotal_minor,
-          0
-        );
-        const spansOtherSellers = yourTotal !== order.total_minor;
-
-        return (
-          <section key={order.id} className={styles.section}>
-            <div className={styles.header}>
-              <div>
-                <h2 className={styles.sectionTitle}>
-                  {formatDateTime(order.created_at)}
-                </h2>
-                <p className={styles.rowMeta}>
-                  <span className={styles.badge}>{order.status}</span> {order.id}
-                </p>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <p className={styles.rowPrice}>
-                  {formatMoney(yourTotal, order.currency)}
-                </p>
-                <p className={styles.hint}>
-                  {spansOtherSellers
-                    ? `your items · ${formatMoney(order.total_minor, order.currency)} order total`
-                    : 'your items'}
-                </p>
-              </div>
-            </div>
-
-            <ul className={styles.list}>
-              {order.order_items.map((item) => (
-                <li key={item.id} className={styles.listRow}>
-                  <span className={styles.rowMain}>
-                    {/* A purchase-time snapshot: later catalogue edits do not
-                        rewrite what was actually sold. */}
-                    <span className={styles.rowName}>{item.product_name}</span>
-                    <span className={styles.rowMeta}>
-                      {item.quantity} ×{' '}
-                      {formatMoney(item.unit_price_minor, order.currency)}
-                    </span>
-                  </span>
-                  <span className={styles.rowPrice}>
-                    {formatMoney(item.subtotal_minor, order.currency)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        );
-      })}
+      {visible.map(({ order, items }) => (
+        <OrderCard key={order.id} order={order} items={items} />
+      ))}
     </main>
   );
 }
