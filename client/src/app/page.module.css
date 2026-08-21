@@ -200,3 +200,144 @@
 .emptyAction:hover {
   background: var(--surface-muted);
 }
+
+/* ── Signed-out state ─────────────────────────────────────────────────────
+   The first thing an anonymous visitor sees, so it is treated as a front door
+   rather than an error. Ghost cards behind hint at the shape of what is behind
+   the sign-in without inventing any product data — they carry no text, no
+   prices and no counts. */
+
+.locked {
+  position: relative;
+  margin-top: var(--space-8);
+  isolation: isolate;
+}
+
+.lockedBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  /* Fixed rows anchored to the top: without these the grid stretches its two
+     rows across the whole section and the cards read as stray rectangles
+     rather than a catalogue continuing behind the panel. */
+  grid-auto-rows: var(--space-11);
+  align-content: start;
+  gap: var(--space-4);
+  overflow: hidden;
+  pointer-events: none;
+  /* Fades out towards the bottom so the panel sits on quiet ground. */
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 55%), transparent 78%);
+  -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / 55%), transparent 78%);
+}
+
+.ghostCard {
+  border: var(--stroke-thin) solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+}
+
+.lockedPanel {
+  max-width: var(--container-sm);
+  margin: var(--space-8) auto 0;
+  padding: var(--space-9) var(--space-7);
+  border: var(--stroke-thin) solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.lockBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-9);
+  height: var(--space-9);
+  border-radius: var(--radius-full);
+  background: var(--accent-surface);
+  color: var(--accent);
+}
+
+.lockBadge svg {
+  width: var(--space-5);
+  height: var(--space-5);
+}
+
+.lockedTitle {
+  margin-top: var(--space-5);
+  font-size: var(--text-lg);
+}
+
+.lockedBody {
+  max-width: var(--measure-tight);
+  margin: var(--space-3) auto 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.lockedActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-7);
+}
+
+.primaryAction,
+.secondaryAction {
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  transition: background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-instant) var(--ease-out);
+}
+
+.primaryAction {
+  border: var(--stroke-thin) solid transparent;
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.primaryAction:hover {
+  background: var(--accent-hover);
+}
+
+.secondaryAction {
+  border: var(--stroke-thin) solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.secondaryAction:hover {
+  background: var(--surface-muted);
+}
+
+.primaryAction:active,
+.secondaryAction:active {
+  transform: scale(0.98);
+}
+
+.lockedNote {
+  margin-top: var(--space-6);
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primaryAction:active,
+  .secondaryAction:active {
+    transform: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .lockedPanel {
+    margin-top: var(--space-7);
+    padding: var(--space-7) var(--space-5);
+  }
+}

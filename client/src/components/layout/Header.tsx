@@ -83,7 +83,7 @@ export function Header() {
       </Link>
 
       <nav className={styles.nav}>
-        <Link href="/" className={styles.link}>
+        <Link href="/" className={`${styles.link} ${styles.navHome}`}>
           Marketplace
         </Link>
 

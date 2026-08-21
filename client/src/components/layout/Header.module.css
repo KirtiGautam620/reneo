@@ -171,4 +171,34 @@
   .authPlaceholder {
     display: none;
   }
+
+  /*
+   * At this width the signed-out bar (Marketplace · Log in · Sign up · Cart)
+   * overflowed: "Sign up" wrapped onto two lines and the cart was pushed off
+   * the right edge. The brand already links home, so the Marketplace link is
+   * the redundant one and goes first.
+   */
+  .navHome {
+    display: none;
+  }
+
+  .header {
+    gap: var(--space-1);
+  }
+
+  .link,
+  .logout,
+  .signup {
+    padding: var(--space-2);
+  }
+
+  .signup,
+  .cart {
+    white-space: nowrap;
+  }
+
+  .cart {
+    margin-left: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+  }
 }

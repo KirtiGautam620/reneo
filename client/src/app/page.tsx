@@ -18,6 +18,33 @@ const SORTS: { value: ProductSort; label: string }[] = [
 
 const ALL_CATEGORIES = '';
 
+function StorefrontIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 9.5V19a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9.5"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3.2 6.6 4.6 4.3A1 1 0 0 1 5.45 3.8h13.1a1 1 0 0 1 .86.5l1.39 2.3a2.6 2.6 0 0 1-4.4 2.75 2.6 2.6 0 0 1-4.4 0 2.6 2.6 0 0 1-4.4 0 2.6 2.6 0 0 1-4.4-2.75Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10 20v-4.2a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V20"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /** Mirrors the real card exactly — same container class, so nothing moves. */
 function CardSkeleton() {
   return (
@@ -80,17 +107,38 @@ export default function MarketplacePage() {
       <main className={styles.page}>
         <h1 className={styles.heading}>Marketplace</h1>
         <p className={styles.subheading}>Browse products from every seller.</p>
-        <p className={`${styles.notice} ${styles.noticeTop}`}>
-          The marketplace is only visible to signed-in accounts.{' '}
-          <Link href="/login" className={styles.noticeLink}>
-            Log in
-          </Link>{' '}
-          or{' '}
-          <Link href="/signup" className={styles.noticeLink}>
-            create an account
-          </Link>{' '}
-          to continue.
-        </p>
+
+        <section className={styles.locked}>
+          {/* Decorative only — empty shapes, never invented products. */}
+          <div className={styles.lockedBackdrop} aria-hidden="true">
+            {Array.from({ length: 12 }, (_, index) => (
+              <span key={index} className={styles.ghostCard} />
+            ))}
+          </div>
+
+          <div className={styles.lockedPanel}>
+            <span className={styles.lockBadge}>
+              <StorefrontIcon />
+            </span>
+
+            <h2 className={styles.lockedTitle}>Sign in to start browsing</h2>
+            <p className={styles.lockedBody}>
+              Products, prices and stock are served only to signed-in accounts.
+              Creating one takes a moment, and you can buy or sell with it.
+            </p>
+
+            <div className={styles.lockedActions}>
+              <Link href="/signup" className={styles.primaryAction}>
+                Create an account
+              </Link>
+              <Link href="/login" className={styles.secondaryAction}>
+                Log in
+              </Link>
+            </div>
+
+            <p className={styles.lockedNote}>Free to join. No card required.</p>
+          </div>
+        </section>
       </main>
     );
   }
