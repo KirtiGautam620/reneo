@@ -3,36 +3,44 @@
 import { use, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useProduct } from '@/hooks/use-products';
 import {
   useAdjustInventory,
   useArchiveProduct,
+  useProduct,
   useUpdateProduct,
-} from '@/hooks/use-seller-products';
-import { describeSellerError } from '@/lib/seller-errors';
-import { formatMoney, toMinorUnits } from '@/lib/format';
+} from '@/hooks/use-products';
+import { describeSellerError, fieldErrors, hasFieldErrors } from '@/lib/seller-errors';
+import { currencyStep, formatMoney, toMajorUnits, toMinorUnits } from '@/lib/format';
 import type { ProductWithInventory, UpdateProductRequest } from '@/types/api';
-import styles from '../../seller.module.css';
+import styles from '../../../seller.module.css';
 
 /**
- * Form state is seeded from the product through useState initialisers, and the
- * parent keys this component on `updated_at` — so a successful save remounts it
- * against server truth instead of syncing fields in an effect.
+ * Details form. Fields are seeded through useState initialisers rather than an
+ * effect, and the parent keys this on the product *id* only.
+ *
+ * Keying on `updated_at` instead would remount the form on every successful
+ * save — discarding the "Changes saved" acknowledgement before it could render,
+ * and overwriting whatever the seller had since typed. The diff below compares
+ * against the live `product` prop, so the baseline is still current after a
+ * save even though the component has not remounted.
  */
-function ProductDetailsForm({ product }: { product: ProductWithInventory }) {
+function DetailsForm({ product }: { product: ProductWithInventory }) {
   const updateProduct = useUpdateProduct(product.id);
 
   const [name, setName] = useState(product.name);
   const [description, setDescription] = useState(product.description ?? '');
   const [category, setCategory] = useState(product.category);
-  const [price, setPrice] = useState(String(product.price_minor));
+  const [price, setPrice] = useState(
+    String(toMajorUnits(product.price_minor, product.currency))
+  );
   const [saved, setSaved] = useState(false);
 
   const priceMinor = toMinorUnits(price, product.currency);
+  const errors = fieldErrors(updateProduct.error);
 
   /**
    * PATCH requires at least one field and rejects unknown keys, so only what
-   * actually changed is sent.
+   * actually changed is sent — and never `quantity`, which the endpoint refuses.
    */
   const patch: UpdateProductRequest | null = (() => {
     if (priceMinor === null) return null;
@@ -45,9 +53,12 @@ function ProductDetailsForm({ product }: { product: ProductWithInventory }) {
     return Object.keys(next).length > 0 ? next : null;
   })();
 
+  const touch = () => setSaved(false);
+
   return (
     <form
       className={styles.form}
+      noValidate
       onSubmit={(event) => {
         event.preventDefault();
         if (!patch) return;
@@ -58,63 +69,65 @@ function ProductDetailsForm({ product }: { product: ProductWithInventory }) {
       <label className={styles.field}>
         <span className={styles.label}>Name</span>
         <input
-          className={styles.input}
+          className={`${styles.input} ${errors.name ? styles.inputInvalid : ''}`}
           value={name}
-          onChange={(event) => {
-            setName(event.target.value);
-            setSaved(false);
-          }}
+          onChange={(e) => { setName(e.target.value); touch(); }}
           maxLength={200}
+          aria-invalid={Boolean(errors.name)}
         />
+        {errors.name && <span className={styles.fieldError}>{errors.name}</span>}
       </label>
 
       <label className={styles.field}>
         <span className={styles.label}>Description</span>
         <textarea
-          className={styles.textarea}
+          className={`${styles.textarea} ${errors.description ? styles.inputInvalid : ''}`}
           value={description}
-          onChange={(event) => {
-            setDescription(event.target.value);
-            setSaved(false);
-          }}
+          onChange={(e) => { setDescription(e.target.value); touch(); }}
           maxLength={2000}
+          aria-invalid={Boolean(errors.description)}
         />
+        {errors.description && (
+          <span className={styles.fieldError}>{errors.description}</span>
+        )}
       </label>
 
       <label className={styles.field}>
         <span className={styles.label}>Category</span>
         <input
-          className={styles.input}
+          className={`${styles.input} ${errors.category ? styles.inputInvalid : ''}`}
           value={category}
-          onChange={(event) => {
-            setCategory(event.target.value);
-            setSaved(false);
-          }}
+          onChange={(e) => { setCategory(e.target.value); touch(); }}
           maxLength={100}
+          aria-invalid={Boolean(errors.category)}
         />
+        {errors.category && (
+          <span className={styles.fieldError}>{errors.category}</span>
+        )}
       </label>
 
       <label className={styles.field}>
         <span className={styles.label}>Price</span>
         <input
-          className={styles.input}
+          className={`${styles.input} ${errors.price_minor ? styles.inputInvalid : ''}`}
           type="number"
           min={0}
-          step={1}
+          step={currencyStep(product.currency)}
           value={price}
-          onChange={(event) => {
-            setPrice(event.target.value);
-            setSaved(false);
-          }}
+          onChange={(e) => { setPrice(e.target.value); touch(); }}
+          aria-invalid={Boolean(errors.price_minor)}
         />
         <span className={styles.hint}>
           {priceMinor === null
-            ? 'Enter an amount in francs.'
+            ? 'Enter a price.'
             : `Customers will see ${formatMoney(priceMinor, product.currency)}.`}
         </span>
+        {errors.price_minor && (
+          <span className={styles.fieldError}>{errors.price_minor}</span>
+        )}
       </label>
 
-      {updateProduct.isError && (
+      {updateProduct.isError && !hasFieldErrors(updateProduct.error) && (
         <p className={`${styles.notice} ${styles.error}`} role="alert">
           {describeSellerError(updateProduct.error)}
         </p>
@@ -150,9 +163,10 @@ function StockSection({ product }: { product: ProductWithInventory }) {
     <section className={styles.section}>
       <h2 className={styles.sectionTitle}>Stock</h2>
       <p className={styles.hint} style={{ marginTop: 6 }}>
-        Adjustments are relative, not absolute: an order that takes stock while
-        you are typing is added to rather than overwritten. Currently{' '}
-        {product.inventory.quantity} in stock.
+        Stock lives on the inventory relation, not the product, and is changed by
+        a relative amount — an order that takes stock while you are typing is
+        added to rather than overwritten. Currently {product.inventory.quantity}{' '}
+        in stock.
       </p>
 
       <div className={styles.row} style={{ marginTop: 14 }}>
@@ -173,10 +187,7 @@ function StockSection({ product }: { product: ProductWithInventory }) {
           className={styles.secondary}
           disabled={!deltaValid || adjustInventory.isPending}
           onClick={() =>
-            adjustInventory.mutate(
-              { delta: deltaValue },
-              { onSuccess: () => setDelta('') }
-            )
+            adjustInventory.mutate({ delta: deltaValue }, { onSuccess: () => setDelta('') })
           }
         >
           {adjustInventory.isPending ? 'Applying…' : 'Apply'}
@@ -184,21 +195,13 @@ function StockSection({ product }: { product: ProductWithInventory }) {
       </div>
 
       {adjustInventory.isError && (
-        <p
-          className={`${styles.notice} ${styles.error}`}
-          role="alert"
-          style={{ marginTop: 14 }}
-        >
+        <p className={`${styles.notice} ${styles.error}`} role="alert" style={{ marginTop: 14 }}>
           {describeSellerError(adjustInventory.error)}
         </p>
       )}
 
       {adjustInventory.isSuccess && (
-        <p
-          className={`${styles.notice} ${styles.success}`}
-          role="status"
-          style={{ marginTop: 14 }}
-        >
+        <p className={`${styles.notice} ${styles.success}`} role="status" style={{ marginTop: 14 }}>
           Stock is now {adjustInventory.data.quantity}.
         </p>
       )}
@@ -214,8 +217,11 @@ function ArchiveSection({ product }: { product: ProductWithInventory }) {
     <section className={styles.section}>
       <h2 className={styles.sectionTitle}>Archive</h2>
       <p className={styles.hint} style={{ marginTop: 6 }}>
-        Archiving hides the product from the marketplace and blocks new orders.
-        It is not deleted — order history keeps referring to it.
+        {/* Soft delete: order_items references this product, so the row must
+            survive or order history would be destroyed. */}
+        Archiving sets the status to ARCHIVED — it hides the product from the
+        marketplace and blocks new orders. Nothing is deleted, and past orders
+        keep referring to it.
       </p>
 
       <div style={{ marginTop: 14 }}>
@@ -225,7 +231,7 @@ function ArchiveSection({ product }: { product: ProductWithInventory }) {
           disabled={archiveProduct.isPending}
           onClick={() =>
             archiveProduct.mutate(product.id, {
-              onSuccess: () => router.push('/seller'),
+              onSuccess: () => router.push('/seller/products'),
             })
           }
         >
@@ -234,11 +240,7 @@ function ArchiveSection({ product }: { product: ProductWithInventory }) {
       </div>
 
       {archiveProduct.isError && (
-        <p
-          className={`${styles.notice} ${styles.error}`}
-          role="alert"
-          style={{ marginTop: 14 }}
-        >
+        <p className={`${styles.notice} ${styles.error}`} role="alert" style={{ marginTop: 14 }}>
           {describeSellerError(archiveProduct.error)}
         </p>
       )}
@@ -252,9 +254,6 @@ export default function EditProductPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-
-  // A seller can read their own ARCHIVED products, so this still resolves after
-  // archiving.
   const { data: product, isPending, isError, error } = useProduct(id);
 
   if (isPending) {
@@ -268,8 +267,8 @@ export default function EditProductPage({
   if (isError || !product) {
     return (
       <main className={styles.page}>
-        <Link href="/seller" className={styles.back}>
-          ← Your store
+        <Link href="/seller/products" className={styles.back}>
+          ← Products
         </Link>
         <p className={`${styles.notice} ${styles.error}`} role="alert">
           {describeSellerError(error)}
@@ -282,8 +281,8 @@ export default function EditProductPage({
 
   return (
     <main className={`${styles.page} ${styles.narrow}`}>
-      <Link href="/seller" className={styles.back}>
-        ← Your store
+      <Link href="/seller/products" className={styles.back}>
+        ← Products
       </Link>
 
       <div className={styles.header}>
@@ -297,13 +296,8 @@ export default function EditProductPage({
         {product.inventory.quantity} in stock
       </p>
 
-      <ProductDetailsForm
-        key={`${product.id}:${product.updated_at}`}
-        product={product}
-      />
-
+      <DetailsForm key={product.id} product={product} />
       <StockSection product={product} />
-
       {!isArchived && <ArchiveSection product={product} />}
     </main>
   );

@@ -48,6 +48,14 @@ export function toMinorUnits(major: string | number, currency: string): number |
   return Math.round(value * 10 ** currencyExponent(currency));
 }
 
+/**
+ * The smallest step a price input should allow, in major units: 1 for a
+ * zero-decimal currency like XOF, 0.01 for USD, 0.001 for KWD.
+ */
+export function currencyStep(currency: string): number {
+  return 1 / 10 ** currencyExponent(currency);
+}
+
 export function formatMoney(minor: number, currency = 'XOF'): string {
   const amount = toMajorUnits(minor, currency);
   try {

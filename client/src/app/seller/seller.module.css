@@ -258,3 +258,56 @@
   text-decoration: underline;
   color: var(--text-primary);
 }
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.card {
+  display: block;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: border-color 0.15s ease;
+}
+
+.card:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-muted);
+}
+
+.cardTitle {
+  /* Spans by default are inline, which swallows the hint's margin-top and
+     leaves the two running together on one line. */
+  display: block;
+  font-size: 15px;
+  font-weight: 620;
+}
+
+.cardHint {
+  display: block;
+  margin-top: 5px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.storeMeta {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.inputInvalid {
+  border-color: var(--danger);
+}
+
+.fieldError {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--danger);
+}

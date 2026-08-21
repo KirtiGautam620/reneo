@@ -44,3 +44,34 @@ export function describeSellerError(error: unknown): string {
       return error.message;
   }
 }
+
+/**
+ * A VALIDATION_ERROR carries `details` as an array of `{ path, message }`, so
+ * the API can say which field it rejected. Pulling them out by path lets a form
+ * put each message beside the input that caused it instead of dumping one
+ * combined string at the top.
+ *
+ * Returns an empty map for every other error shape, so callers can render field
+ * errors and a general message from the same failure without branching twice.
+ */
+export function fieldErrors(error: unknown): Record<string, string> {
+  if (!(error instanceof ApiError)) return {};
+  if (error.code !== 'VALIDATION_ERROR') return {};
+
+  const details = error.details;
+  if (!Array.isArray(details)) return {};
+
+  const byField: Record<string, string> = {};
+  for (const issue of details as ValidationIssue[]) {
+    if (typeof issue?.path !== 'string' || typeof issue?.message !== 'string') continue;
+    // Zod joins nested paths with dots; the first segment is the field.
+    const field = issue.path.split('.')[0];
+    if (field && !byField[field]) byField[field] = issue.message;
+  }
+  return byField;
+}
+
+/** True when the failure was field-level and is already shown beside the inputs. */
+export function hasFieldErrors(error: unknown): boolean {
+  return Object.keys(fieldErrors(error)).length > 0;
+}
