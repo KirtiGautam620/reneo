@@ -1,7 +1,15 @@
 import { supabase } from './supabase/client';
 import type { ApiErrorCode, ErrorDetails, ProductErrorDetails } from '@/types/api';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL!;
+/**
+ * Base URL of the Express API.
+ *
+ * Set NEXT_PUBLIC_API_URL in the deployment environment; it is inlined at build
+ * time, so a production build must be given the production API origin. The
+ * localhost fallback exists so a fresh clone runs without configuration — it is
+ * never what a deployed build should be using.
+ */
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export class ApiError extends Error {
   constructor(

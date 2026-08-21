@@ -1,56 +1,65 @@
-# Reneo — Backend API
+# Reneo
 
-Backend for a multi-seller commerce platform. Node.js / TypeScript / Express / Supabase (PostgreSQL).
+A multi-seller commerce platform. Customers browse one marketplace and buy from
+several independent sellers in a single order; sellers run their own store,
+catalogue and stock.
 
-> **Status:** work in progress. See [Known limitations](#known-limitations) for an honest account of what is and isn't done.
+Two halves in one repository:
 
----
+| | | |
+|---|---|---|
+| [`server/`](server/) | Express + TypeScript + Supabase (PostgreSQL) | the API and the database |
+| [`client/`](client/) | Next.js App Router + React Query + CSS Modules | the storefront and seller console |
+| [`openapi.yaml`](openapi.yaml) | OpenAPI 3.1 | the contract between them, and the source of truth |
 
-## Setup
-
-**Requirements:** Node.js 22+ (see note below), a Supabase project.
-
-```bash
-git clone <repo>
-cd reneo-backend
-npm install
-cp .env.example .env
-npm run dev
-```
-
-Apply the migrations in `supabase/migrations/` in numerical order via the Supabase SQL Editor (or `supabase db push`). They rebuild the database from scratch.
-
-**Node version:** `@supabase/supabase-js` requires native `WebSocket`, available from Node 22. On Node 20 the server fails at boot. `engines` is set accordingly.
-
-**Test users:** email confirmation is disabled in the Supabase project for local testing. In production it would be required.
+> **Status:** working end to end locally — signup, browse, cart, checkout,
+> order history, seller onboarding, catalogue management and incoming orders
+> have all been exercised against the real API in a browser. It is not
+> production-ready. [Not implemented](#not-implemented) is an honest list of
+> what is missing.
 
 ---
 
 ## Architecture
 
 ```
-Client
-  │  JWT (Authorization: Bearer)
+Browser
+  │
+  │  ① Supabase Auth (sign-in/up, session, one profiles read)
+  │     └────────────────────────────────────────────► Supabase Auth
+  │
+  │  ② everything else — products, orders, stores, inventory
+  │     Authorization: Bearer <user JWT>
   ▼
-Express
-  ├─ authenticate      → verifies JWT, loads profile, builds a per-request
-  │                      Supabase client carrying the caller's token
+Express  (server/)
+  ├─ authenticate      → verifies the JWT, loads the profile, builds a
+  │                      per-request Supabase client carrying the caller's token
   ├─ requireRole       → defence in depth (RLS is the real control)
   ├─ zod .strict()     → rejects unknown keys, e.g. a client-supplied price
-  └─ errorHandler      → single error shape for every response
+  └─ errorHandler      → one error shape for every response
   │
   ▼
 PostgreSQL (Supabase)
   ├─ Row Level Security on every table — the actual authorization layer
-  ├─ create_order()    — SECURITY DEFINER, one transaction, atomic stock
-  └─ events            — transactional outbox
+  ├─ create_order()      SECURITY DEFINER, one transaction, atomic stock
+  ├─ adjust_inventory()  SECURITY DEFINER, relative restock
+  └─ events              transactional outbox
 ```
+
+The security boundary is **the database, not the API**. Express does not decide
+who may see what; it forwards the caller's JWT to PostgreSQL, and RLS policies
+evaluate `auth.uid()` against every row. If the API layer had a bug that
+dropped a `WHERE` clause, the database would still refuse.
 
 ### The one architectural decision everything follows from
 
-`supabase-js` has no transaction API. Every `.from().select()` is a separate HTTP request in its own transaction. Multi-step logic that must be atomic therefore **cannot** live in Node — it has to be a PostgreSQL function invoked via `rpc()`, whose body is an implicit transaction.
+`supabase-js` has no transaction API. Every `.from().select()` is a separate
+HTTP request in its own transaction. Multi-step logic that must be atomic
+therefore **cannot** live in Node — it has to be a PostgreSQL function invoked
+via `rpc()`, whose body is an implicit transaction.
 
-This is why `create_order` is written in plpgsql rather than TypeScript, and it is the reason the concurrency guarantee holds.
+This is why `create_order` is written in plpgsql rather than TypeScript, and it
+is the reason the concurrency guarantee holds.
 
 ### Key/role model
 
@@ -59,9 +68,243 @@ This is why `create_order` is written in plpgsql rather than TypeScript, and it 
 | publishable (`sb_publishable_…`) + caller JWT | every application request | **applies** |
 | secret (`sb_secret_…`) | JWT verification, test fixtures, outbox worker | bypassed |
 
-Application code never uses the secret key to read or write business data. `req.db` is built per request from the caller's token, so `auth.uid()` resolves correctly and RLS is in force by default rather than by remembering.
+Application code never uses the secret key to read or write business data.
+`req.db` is built per request from the caller's token, so `auth.uid()` resolves
+correctly and RLS is in force by default rather than by remembering.
+
+**The secret key exists only in `server/`.** It is never sent to the browser,
+and `client/` has no variable that could carry it — see
+[Environment variables](#environment-variables).
 
 ---
+
+## Why the frontend does not query Supabase directly
+
+`@supabase/supabase-js` is in the client, and it would be entirely possible to
+call `supabase.from('products').select()` from a React component. The project
+deliberately does not, with one narrow exception.
+
+**The only permitted direct Supabase use in the browser is authentication** —
+sign-in, sign-up, session handling — **plus a single `profiles` read** in
+[`use-session.ts`](client/src/hooks/use-session.ts) to learn the caller's role.
+Everything else goes through [`api-client.ts`](client/src/lib/api-client.ts) to
+Express.
+
+The reasons, in order of weight:
+
+1. **Server-owned pricing.** `POST /orders` accepts only product IDs and
+   quantities. Price, seller and availability are resolved server-side inside
+   the order transaction. If the browser could write to the tables, the price
+   would become a client input — and a client input is an attacker input.
+   `orders` and `order_items` have **no INSERT policy at all**: not even the
+   customer who owns the order can create one through the table API. The only
+   path is `create_order()`.
+
+2. **Atomicity.** Reserving stock, pricing lines, writing the order and emitting
+   the outbox event must happen in one transaction. PostgREST cannot express
+   that, so it has to be one RPC — and once it is an RPC, having half the app
+   speak to tables and half to functions is a needless second data path.
+
+3. **One contract.** `openapi.yaml` describes what the frontend may rely on.
+   Reading tables directly would couple React components to the physical schema,
+   so a column rename becomes a frontend outage.
+
+4. **Validation.** `zod .strict()` rejects unknown keys at the boundary. A
+   payload containing a price is a 400, not a silently ignored field.
+
+RLS is still the backstop, not the plan: even if this rule were violated, the
+database would refuse to serve another seller's rows.
+
+---
+
+## Concurrent stock reservation
+
+**Guarantee:** stock 1, two simultaneous orders — exactly one succeeds, the
+other receives `409 OUT_OF_STOCK`.
+
+The mechanism is described in full under [Concurrency](#concurrency-b1) below.
+In short: a conditional decrement (`UPDATE … WHERE quantity >= requested`)
+performs lock acquisition, predicate evaluation and write as one indivisible
+operation, so there is no gap between the check and the write — the check *is*
+the write.
+
+### How the UI surfaces a conflict
+
+This is the moment the database's guarantee becomes visible to a person, so the
+frontend treats it as a first-class path rather than a generic failure.
+
+- The client branches on `error.code`, **never on message text**
+  ([`checkout-errors.ts`](client/src/lib/checkout-errors.ts)). The API contract
+  guarantees the code; the prose is not stable.
+- `OUT_OF_STOCK` and `PRODUCT_UNAVAILABLE` carry the failing `product_id` in
+  `error.details`, so the cart can **name the item** without parsing a string.
+- On conflict the cart invalidates every product query, because the stock
+  numbers on screen have just been proven stale. The offending line re-renders
+  with the real remaining quantity and a "Only N left" warning, and is
+  highlighted.
+- The message says plainly that **nothing was charged and no order was
+  created** — true, because the whole plpgsql function rolls back.
+- Checkout is blocked until the quantity is lowered or the line removed. The
+  error is not dismissible into a retry loop that would fail identically.
+
+---
+
+## Idempotency on order creation
+
+`POST /orders` accepts an `Idempotency-Key` header. The server side is
+described under [Idempotency](#idempotency-b2).
+
+**What the client does with it** matters as much as the header itself
+([`use-checkout.ts`](client/src/hooks/use-checkout.ts)):
+
+- A key is generated with `crypto.randomUUID()` **once per checkout attempt**
+  and held stable across retries of that attempt. A fresh key per retry would
+  defeat the entire mechanism — every retry would create another order.
+- The key alone is not sufficient. The server matches a replay on a hash of the
+  `items` array *as well as* the key, so a retry must resend a **byte-identical
+  payload**. The client therefore pins the key to the exact payload it was
+  issued for, and sorts items by `product_id` before serialising so that two
+  submissions of the same cart are identical regardless of the order things
+  were added in.
+- If the cart changes, the attempt is abandoned and a new key issued — reusing
+  the old one against a changed payload is a `409 IDEMPOTENCY_KEY_REUSED` by
+  design.
+- A lost response is therefore safe to retry: the same key and payload replay
+  the original order rather than placing a second one.
+
+---
+
+## Transactional outbox
+
+`ORDER_CREATED` is written to `events` inside the same transaction as the
+order, so the two commit or roll back together. Detail under
+[Events](#events-b3).
+
+**The UI does not surface event status.** Nothing in `openapi.yaml` exposes it:
+`Order` carries no event field, there is no events endpoint, and RLS is enabled
+on `events` with no policies at all — so no authenticated user can read a row,
+only the service-role worker. Showing a "pending → processed" indicator would
+have meant inventing an endpoint, so it was left out rather than faked. See
+[Not implemented](#not-implemented).
+
+---
+
+## Local setup
+
+**Requirements:** Node.js 22+, a Supabase project.
+
+`@supabase/supabase-js` requires native `WebSocket`, available from Node 22. On
+Node 20 the server fails at boot.
+
+### 1. Database
+
+Apply everything in [`server/supabase/migrations/`](server/supabase/migrations/)
+in numerical order (`0001` … `0009`) via the Supabase SQL Editor, or
+`supabase db push`. They rebuild the database from scratch.
+
+Email confirmation is disabled in the Supabase project for local testing. In
+production it would be required.
+
+### 2. API — `server/`
+
+```bash
+cd server
+npm install
+cp .env.example .env      # fill in the Supabase URL and keys
+npm run dev               # listens on PORT, default 4000
+```
+
+### 3. Frontend — `client/`
+
+```bash
+cd client
+npm install
+cp .env.example .env.local   # fill in the Supabase URL and anon key
+npm run dev                  # http://localhost:3000
+```
+
+The two must be on different ports. The API defaults to `4000` and the
+frontend to `3000`; CORS on the API allows `localhost:3000` and `localhost:3001`
+out of the box, and is configurable via `CORS_ORIGINS`.
+
+Sign up one **seller** and one **customer** account. The seller creates a store,
+adds a product with stock; the customer can then browse and buy it.
+
+### Environment variables
+
+**`server/.env`** — secret. Never committed.
+
+| Variable | Purpose |
+|---|---|
+| `SUPABASE_URL` | project URL |
+| `SUPABASE_PUBLISHABLE_KEY` | anon key, used for per-request clients that carry the caller's JWT |
+| `SUPABASE_SECRET_KEY` | **service role.** JWT verification, outbox worker, test fixtures. Bypasses RLS — server only |
+| `SUPABASE_JWKS_URL` | JWT verification |
+| `PORT` | API port, default 4000 |
+| `CORS_ORIGINS` | comma-separated allowed origins, defaults to the two localhost dev ports |
+
+**`client/.env.local`** — see [`client/.env.example`](client/.env.example).
+
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | base URL of the Express API. Defaults to `http://localhost:4000` for a fresh clone; **a production build must be given the production origin**, since `NEXT_PUBLIC_` values are inlined at build time |
+| `NEXT_PUBLIC_SUPABASE_URL` | project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon key — public by design |
+
+Every client variable is `NEXT_PUBLIC_`, which means **every one of them is
+compiled into the JavaScript bundle and readable by anyone**. That is acceptable
+only because none of them grants anything: the anon key identifies the project,
+not a user, and RLS decides what the signed-in user may touch. The service-role
+key is absent from `client/` entirely — verified against both the source and the
+built output.
+
+---
+
+## Frontend
+
+```
+client/src/
+  app/                  App Router pages, each with a co-located *.module.css
+    (auth)/             login, signup
+    products/[id]/      product detail
+    cart/               cart and checkout
+    orders/             customer order history
+    seller/             store onboarding, catalogue, incoming orders
+  components/           Header, Skeleton
+  hooks/                use-products, use-orders, use-cart, use-checkout, use-store, use-session
+  lib/                  api-client, endpoints, format, checkout-errors, seller-errors, motion
+  types/api.ts          types mirroring openapi.yaml
+```
+
+**Rules the code holds to**
+
+- Every API call goes through `api-client.ts`. No raw `fetch` to Express
+  anywhere else.
+- Every path lives in `endpoints.ts`. No URLs assembled inline.
+- React Query key factories per resource (`productKeys`, `orderKeys`,
+  `storeKeys`); a mutation invalidates the whole affected tree, because a price
+  or stock change is visible from the marketplace, the seller list and the
+  detail view at once.
+- **Money is never divided inline.** Amounts are integer minor units, and the
+  exponent is asked of `Intl.NumberFormat` rather than assumed to be 2 — XOF is
+  zero-decimal, so a hardcoded `/100` would render a 50 000 franc product as
+  500. All rendering goes through [`format.ts`](client/src/lib/format.ts).
+- CSS Modules only, referencing design tokens defined in
+  [`globals.css`](client/src/app/globals.css). No hardcoded colours or spacing
+  outside that file.
+- TypeScript strict, no `any`.
+
+**Pagination.** The marketplace uses keyset pagination through
+`useInfiniteQuery`. A cursor is only valid for the sort it was issued with, so
+`sort` is part of the query key — changing it starts a fresh chain rather than
+replaying a stale cursor. A rejected cursor (`400`) resets to the first page
+instead of showing an error.
+
+---
+
+## Backend detail
+
+The reasoning behind the database design, and the guarantees it provides.
 
 ## Schema
 
@@ -268,19 +511,25 @@ Clients branch on `code`, never on message text. Postgres error codes raised by 
 
 ---
 
+---
+
 ## API documentation
 
-_TODO: OpenAPI spec or Postman collection, and where to find it._
+[`openapi.yaml`](openapi.yaml) — OpenAPI 3.1, and the source of truth for the
+frontend. Field names and endpoint paths in `client/src/types/api.ts` and
+`client/src/lib/endpoints.ts` mirror it.
 
 ---
 
 ## Tests
 
 ```bash
-npm test
+cd server && npm test
 ```
 
-_TODO: fill in once written._
+`server/tests/` contains an API suite and a concurrency suite (Vitest +
+Supertest), including the last-unit race fired with `Promise.all` so the
+requests genuinely race — sequential `await`s would not test concurrency at all.
 
 | # | Scenario | Expected |
 |---|---|---|
@@ -290,14 +539,114 @@ _TODO: fill in once written._
 | 4 | Customer orders more than stock | 409 |
 | 5 | N simultaneous orders for the last item | exactly one 201 |
 
-Test 5 fires requests with `Promise.all` so they actually race; sequential `await`s would not test concurrency at all.
+These run against a live Supabase project and create real auth users, so they
+are not hermetic. **There is no frontend test suite** — the client has been
+verified by driving a real browser against the running stack, not by automated
+tests checked into the repo. See [Not implemented](#not-implemented).
 
 ---
 
-## Known limitations
+## Trade-offs
 
-- **`POST /products` is not atomic.** The product row and its inventory row are two separate round trips. If the second fails, a product exists with no inventory. The fix is the same one used for orders — move it into a plpgsql function. _TODO: state whether you fixed it or left it._
-- _TODO: add the rest as you find them. This section is worth more filled in honestly than left empty._
+Choices that are defensible but genuinely cost something.
+
+**Client-side auth, not `@supabase/ssr` cookie sessions.** The session lives in
+browser storage and is read by client components; route guards are `useEffect`
+redirects in layouts. Consequences, honestly:
+
+- Protected pages render a loading state and then redirect, rather than never
+  being served. A determined user sees the shell of `/seller` briefly.
+- There is no middleware or server-side session, so no server component can
+  render personalised content, and no page is protected before it reaches the
+  browser.
+- This is **not** a security hole — every request still carries a JWT and RLS
+  still decides — but it is worse UX and worse SEO than cookie-based sessions.
+
+The correct fix is `@supabase/ssr` with cookie storage plus a Next middleware
+that refreshes the session and gates routes server-side. It was not done.
+
+**Client-side cart.** The cart is `localStorage`, holding only
+`{ product_id, quantity }`. Price and name are deliberately never stored — the
+server resolves them at checkout, so a cached price could only ever be stale or
+forged. Consequences: the cart does not follow a user between devices or
+survive clearing site data, and it cannot be recovered for abandoned-cart
+analysis. A `carts` table would fix it at the cost of a write on every quantity
+change.
+
+**Order detail is filtered from the list.** There is no `GET /orders/{id}`, so
+`/orders/[id]` finds the order within `GET /orders`, which is unpaginated and
+capped at the 50 most recent. An older order cannot be opened by URL.
+
+**Seller grouping shows no store name.** `OrderItem` carries `seller_id` and
+nothing else, and no endpoint maps a seller to a store name, so an order
+spanning several sellers labels the groups "Seller 1", "Seller 2". Putting a
+store name on `OrderItem` is the fix; a lookup endpoint was not invented.
+
+**Category filter is derived, not authoritative.** There is no categories
+endpoint, so the marketplace filter is built from one unfiltered 100-product
+page. A category appearing only beyond that page is not offered.
+
+**`POST /products` is not atomic.** The product row and its inventory row are
+two separate round trips. If the second fails, a product exists with no
+inventory row. Reads tolerate it — a missing inventory row is reported as
+quantity 0 — but the write path should be a plpgsql function, as order creation
+is. Not fixed.
+
+**Restocking is relative, not absolute.** `PATCH /products/{id}/inventory`
+takes a signed delta rather than a new quantity, precisely so it cannot
+overwrite a concurrent order's decrement. It is a slightly less obvious API in
+exchange for being safe under contention.
+
+---
+
+## Not implemented
+
+Stated plainly, rather than left to be discovered.
+
+**Product and catalogue**
+- No product images or media of any kind.
+- No reviews, ratings or seller profiles.
+- Search uses the `simple` text configuration — no stemming and no accent
+  folding, so "lampe" will not match "lampes".
+- The `EXPLAIN` outputs referenced under [Search and pagination](#search-and-pagination-a4)
+  were never pasted into this file; the surrounding analysis was written against
+  runs that are not reproduced here.
+
+**Orders and payment**
+- **No payment of any kind.** An order is placed and stock is reserved; nothing
+  is charged.
+- No cancellation, refund or returns.
+- Order status is effectively decorative: `orders.status` defaults to
+  `CONFIRMED` and nothing ever transitions it. `PENDING` and `CANCELLED` exist
+  in the enum and are unused.
+- No `GET /orders/{id}`, and `GET /orders` is unpaginated and server-capped at
+  50 rows.
+- No shipping, delivery, addresses or fulfilment tracking.
+
+**Outbox**
+- Event state is not exposed through the API, so no UI shows delivery status.
+- Single-instance worker only — two workers would claim the same rows and
+  deliver duplicates. The fix is `FOR UPDATE SKIP LOCKED` in a claim function.
+- Fixed 5-second poll, no exponential backoff. At-least-once delivery.
+- No cleanup job for `idempotency_keys`; the 24-hour retention is documented but
+  nothing deletes expired rows.
+
+**Frontend**
+- No automated frontend tests — no unit, component or end-to-end suite in the
+  repository. Verification was manual, by driving a browser against the running
+  stack.
+- No accessibility audit. Semantic markup, focus-visible styling, `aria-live`
+  regions on async results and reduced-motion support are in place, but nothing
+  has been checked against WCAG or a screen reader.
+- No internationalisation. Copy is English-only, while the target market is
+  francophone.
+- No error monitoring or analytics.
+
+**Operations**
+- No CI, no deployment configuration, no container image. Nothing is deployed.
+- No rate limiting, request logging or observability beyond `console.error`.
+- No admin role or moderation tooling.
+- Email confirmation is disabled in the Supabase project.
 
 ---
 
